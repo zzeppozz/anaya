@@ -1,6 +1,7 @@
 import exifread
 import os
 from osgeo import ogr, osr
+from xml.etree import ElementTree
 
 INPATH = '/Users/astewart/Home/AnneBill'
 SHAPEFILENAME = 'anaya_springs.shp'
@@ -47,7 +48,7 @@ def getDD(degObj, minObj, secObj, isNegative):
    return dd, degrees, minutes, seconds
    
 # ...............................................
-def createLayer(fields, shpFname):
+def _createLayer(fields, shpFname):
    ogr.RegisterAll()
    drv = ogr.GetDriverByName('ESRI Shapefile')
    tSRS = osr.SpatialReference()
@@ -74,8 +75,7 @@ def createLayer(fields, shpFname):
       
 # ...............................................
 def createFeatureInLayer(lyr, fname, pointdata, relStart):
-#   x = point[0]
-#   y = point[1]
+
    ((xdd, ydd), (xdeg, xmin, xsec, xdir), (ydeg, ymin, ysec, ydir)) = pointdata
    pth, basefname = os.path.split(fname)
    relativePath = fname[relStart:]
@@ -111,9 +111,9 @@ def createFeatureInLayer(lyr, fname, pointdata, relStart):
       feat.Destroy()
       
 # ...............................................
-def createLayerShapefile(fields, shpfname, imageData, relStart):
+def createShapefileAndKML(fields, shpfname, imageData, relStart):
    dataset = None
-   dataset, lyr = createLayer(fields, shpfname)
+   dataset, lyr = _createLayer(fields, shpfname)
    for fname, pointdata in imageData.iteritems():
       feat = createFeatureInLayer(lyr, fname, pointdata, relStart)
    if dataset is not None:
@@ -121,6 +121,7 @@ def createLayerShapefile(fields, shpfname, imageData, relStart):
       print('Closed/wrote dataset %s' % shpfname)
       success = True
    return success
+
 
 # ...............................................
 def processImageFile(log, fullname):
@@ -171,6 +172,52 @@ for root, dirs, files in os.walk(INPATH):
          imageData[fullname] = (dd, xdms, ydms)
       
 relStart = len(INPATH) + 1
-createLayerShapefile(FIELDS, os.path.join(INPATH, SHAPEFILENAME), 
+createShapefileAndKML(FIELDS, os.path.join(INPATH, SHAPEFILENAME), 
                      imageData, relStart)
 
+'''
+#SCHEMA#
+<Schema name="anaya_springs" id="anaya_springs">
+        <SimpleField name="arroyo" type="string"></SimpleField>
+        <SimpleField name="fullpath" type="string"></SimpleField>
+        <SimpleField name="relpath" type="string"></SimpleField>
+        <SimpleField name="basename" type="string"></SimpleField>
+        <SimpleField name="geomwkt" type="string"></SimpleField>
+        <SimpleField name="longitude" type="float"></SimpleField>
+        <SimpleField name="latitude" type="float"></SimpleField>
+        <SimpleField name="xdirection" type="string"></SimpleField>
+        <SimpleField name="xdegrees" type="float"></SimpleField>
+        <SimpleField name="xminutes" type="float"></SimpleField>
+        <SimpleField name="xseconds" type="float"></SimpleField>
+        <SimpleField name="ydirection" type="string"></SimpleField>
+        <SimpleField name="ydegrees" type="float"></SimpleField>
+        <SimpleField name="yminutes" type="float"></SimpleField>
+        <SimpleField name="yseconds" type="float"></SimpleField>
+</Schema>
+
+#FOLDERNAME#
+<name>anaya_springs</name>
+
+#PLACEMARKS#
+  <Placemark>
+   <ExtendedData><SchemaData schemaUrl="#anaya_springs">
+      <SimpleData name="arroyo">1 RR-Bill's toptobottom</SimpleData>
+      <SimpleData name="fullpath">/Users/astewart/Home/AnneBill/AnayaSprings/1 RR-Bill's toptobottom/201411_anaya20141103_0020.JPG</SimpleData>
+      <SimpleData name="relpath">AnayaSprings/1 RR-Bill's toptobottom/201411_anaya20141103_0020.JPG</SimpleData>
+      <SimpleData name="basename">201411_anaya20141103_0020.JPG</SimpleData>
+      <SimpleData name="geomwkt">Point (-106.0620556  35.4359889)</SimpleData>
+      <SimpleData name="longitude">-106.062055555555560</SimpleData>
+      <SimpleData name="latitude">35.435988888888886</SimpleData>
+      <SimpleData name="xdirection">W</SimpleData>
+      <SimpleData name="xdegrees">106.000000000000000</SimpleData>
+      <SimpleData name="xminutes">3.000000000000000</SimpleData>
+      <SimpleData name="xseconds">43.399999999999999</SimpleData>
+      <SimpleData name="ydirection">N</SimpleData>
+      <SimpleData name="ydegrees">35.000000000000000</SimpleData>
+      <SimpleData name="yminutes">26.000000000000000</SimpleData>
+      <SimpleData name="yseconds">9.560000000000000</SimpleData>
+   </SchemaData></ExtendedData>
+      <Point><coordinates>-106.0620556,35.4359889</coordinates></Point>
+  </Placemark>
+
+'''

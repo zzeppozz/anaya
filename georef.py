@@ -3,18 +3,22 @@ import os
 from osgeo import ogr, osr
 from xml.etree import ElementTree
 
-INPATH = '/Users/astewart/Home/AnneBill'
+INPATH = '/Users/astewart/Dropbox/Shared/Anaya Springs Pics for Aimee'
 SHAPEFILENAME = 'anaya_springs.shp'
 #inpath = inpath + '/58_RL-Gerview'
 
-fnames = ['gerview20150407_0001.JPG', 'gerview20150407_0005.JPG', 
-          'gerview20150407_0010.JPG', 'gerview20150407_0003.JPG', 
-          'gerview20150407_0007.JPG']
+fnames = ['201411_anaya20141103_0017.JPG', '201411_anaya20141103_0021.JPG', 
+          '201411_anaya20141103_0025.JPG', '201411_anaya20141103_0018.JPGx', 
+          '201411_anaya20141103_0022.JPG', 'top-bot20141103_0100.JPG', 
+          '201411_anaya20141103_0019.JPG', '201411_anaya20141103_0023.JPG', 
+          'top-bot20141103_0101.JPG', '201411_anaya20141103_0020.JPG', 
+          '201411_anaya20141103_0024.JPG', 'top-bot20141103_0102.JPG']
 
 X_KEY = 'GPS GPSLongitude'
 X_DIRECTION_KEY = 'GPS GPSLongitudeRef'
 Y_KEY = 'GPS GPSLatitude'
 Y_DIRECTION_KEY = 'GPS GPSLatitudeRef'
+DATE_KEY = 'GPS GPSDate'
 
 GEOMETRY_WKT = "geomwkt"
 LONGITUDE_FIELDNAME = 'longitude'
@@ -37,6 +41,10 @@ FIELDS = [('arroyo', ogr.OFTString),
           ('yseconds', ogr.OFTReal)]
 
 # ...............................................
+def getDate(basename):
+   dt = tags['GPS GPSDate']
+
+# ...............................................
 def getDD(degObj, minObj, secObj, isNegative):
    degrees = degObj.num / float(degObj.den) 
    minutes = minObj.num / float(minObj.den)
@@ -54,19 +62,18 @@ def _createLayer(fields, shpFname):
    tSRS = osr.SpatialReference()
    tSRS.ImportFromEPSG(4326)
    try:
-      # Create the file object, a layer, and attributes
+      # Create the file object
       ds = drv.CreateDataSource(shpFname)
       if ds is None:
          raise Exception('Dataset creation failed for %s' % shpFname)
-      
+      # Create a layer
       lyr = ds.CreateLayer('anayaSprings', geom_type=ogr.wkbPoint, srs=tSRS)
       if lyr is None:
          raise Exception('Layer creation failed for %s.' % shpFname)
-
    except Exception, e:
       raise Exception('Failed creating dataset or layer for %s (%s)' 
                        % (shpFname, str(e)))
-      
+   # Create attributes
    for (fldname, fldtype) in fields:
       fldDefn = ogr.FieldDefn(fldname, fldtype)
       if lyr.CreateField(fldDefn) != 0:
@@ -75,7 +82,6 @@ def _createLayer(fields, shpFname):
       
 # ...............................................
 def createFeatureInLayer(lyr, fname, pointdata, relStart):
-
    ((xdd, ydd), (xdeg, xmin, xsec, xdir), (ydeg, ymin, ysec, ydir)) = pointdata
    pth, basefname = os.path.split(fname)
    relativePath = fname[relStart:]
@@ -127,6 +133,7 @@ def createShapefileAndKML(fields, shpfname, imageData, relStart):
 def processImageFile(log, fullname):
    dd = xdms = ydms = None
    tmp, ext = os.path.splitext(fullname)
+   # Read entire file
    if ext in ('.jpg', '.JPG'):
       try:
          # Open image file for reading (binary mode)
@@ -137,7 +144,7 @@ def processImageFile(log, fullname):
          print('{}: Unable to read image metadata'.format(fullname))
       finally:
          f.close()
-         
+      # Get longitude, latitude
       xIsNeg = yIsNeg = False
       xDegrees, xMinutes, xSeconds = tags[X_KEY].values
       yDegrees, yMinutes, ySeconds = tags[Y_KEY].values
@@ -149,12 +156,14 @@ def processImageFile(log, fullname):
          yIsNeg = True
       xdd, xdeg, xmin, xsec = getDD(xDegrees, xMinutes, xSeconds, xIsNeg)
       ydd, ydeg, ymin, ysec = getDD(yDegrees, yMinutes, ySeconds, yIsNeg)
-      
+      # Convert to desired format
       dd = (xdd, ydd)
       xdms = (xdeg, xmin, xsec, xdir)
-      ydms = (ydeg, ymin, ysec, ydir)
-      
-   return dd, xdms, ydms
+      ydms = (ydeg, ymin, ysec, ydir)  
+      # Get date
+      dtstr = tags[DATE_KEY].values
+      [yr, mo, day] = [int(x) for x in dtstr.split(':')]
+   return [yr, mo, day], dd, xdms, ydms
 
 # .............................................................................
 # .............................................................................
@@ -167,13 +176,22 @@ imageData = {}
 for root, dirs, files in os.walk(INPATH):
    for fname in files:
       fullname = os.path.join(root, fname)
-      dd, xdms, ydms = processImageFile(log, fullname)
+      [yr, mo, day], dd, xdms, ydms = processImageFile(log, fullname)
       if dd is not None:
-         imageData[fullname] = (dd, xdms, ydms)
+         imageData[fullname] = ([yr, mo, day], dd, xdms, ydms)
       
 relStart = len(INPATH) + 1
-createShapefileAndKML(FIELDS, os.path.join(INPATH, SHAPEFILENAME), 
-                     imageData, relStart)
+# createShapefileAndKML(FIELDS, os.path.join(INPATH, SHAPEFILENAME), 
+#                      imageData, relStart)
+for root, dirs, files in os.walk(INPATH):
+   relpath = fullname[relStart:]
+   print relpath
+   for fname in files:
+      fullname = os.path.join(root, fname)
+      if fname.endswith('.JPG'):
+         getDate(fname)
+   
+
 
 '''
 #SCHEMA#

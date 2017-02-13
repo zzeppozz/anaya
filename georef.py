@@ -15,9 +15,9 @@ fnames = ['201411_anaya20141103_0017.JPG', '201411_anaya20141103_0021.JPG',
           '201411_anaya20141103_0024.JPG', 'top-bot20141103_0102.JPG']
 
 X_KEY = 'GPS GPSLongitude'
-X_DIRECTION_KEY = 'GPS GPSLongitudeRef'
+X_DIR_KEY = 'GPS GPSLongitudeRef'
 Y_KEY = 'GPS GPSLatitude'
-Y_DIRECTION_KEY = 'GPS GPSLatitudeRef'
+Y_DIR_KEY = 'GPS GPSLatitudeRef'
 DATE_KEY = 'GPS GPSDate'
 
 GEOMETRY_WKT = "geomwkt"
@@ -41,19 +41,40 @@ FIELDS = [('arroyo', ogr.OFTString),
           ('yseconds', ogr.OFTReal)]
 
 # ...............................................
-def getDate(basename):
-   dt = tags['GPS GPSDate']
-
+def getDate(tags):
+   # Get date
+   dtstr = tags[DATE_KEY].values
+   [yr, mo, day] = [int(x) for x in dtstr.split(':')]
+   return  yr, mo, day
+      
 # ...............................................
-def getDD(degObj, minObj, secObj, isNegative):
+def _getLocationDim(tags, locKey, dirKey, negativeIndicator):
+   isNegative = False
+   # Get longitude or latitude
+   degObj, minObj, secObj = tags[locKey].values
+   dir = tags[dirKey].printable
+   if dir == negativeIndicator:
+      isNegative = True
+   # Convert to float
    degrees = degObj.num / float(degObj.den) 
    minutes = minObj.num / float(minObj.den)
-   seconds = secObj.num / float(secObj.den)
-   
+   seconds = secObj.num / float(secObj.den)   
+   # Convert to decimal degrees
    dd = (seconds/3600) + (minutes/60) + degrees
    if isNegative:
       dd = -1 * dd
-   return dd, degrees, minutes, seconds
+   return dd, degrees, minutes, seconds, dir
+
+# ...............................................
+def getDD(tags):
+   xdd, xdeg, xmin, xsec, xdir = _getLocationDim(tags, X_KEY, X_DIR_KEY, 'W')
+   ydd, ydeg, ymin, ysec, ydir = _getLocationDim(tags, Y_KEY, Y_DIR_KEY, 'S')
+   # Convert to desired format
+   dd = (xdd, ydd)
+   xdms = (xdeg, xmin, xsec, xdir)
+   ydms = (ydeg, ymin, ysec, ydir)  
+   
+   return dd, xdms, ydms
    
 # ...............................................
 def _createLayer(fields, shpFname):
@@ -144,25 +165,8 @@ def processImageFile(log, fullname):
          print('{}: Unable to read image metadata'.format(fullname))
       finally:
          f.close()
-      # Get longitude, latitude
-      xIsNeg = yIsNeg = False
-      xDegrees, xMinutes, xSeconds = tags[X_KEY].values
-      yDegrees, yMinutes, ySeconds = tags[Y_KEY].values
-      xdir = tags[X_DIRECTION_KEY].printable
-      ydir = tags[Y_DIRECTION_KEY].printable
-      if xdir == 'W':
-         xIsNeg = True
-      if ydir == 'S':
-         yIsNeg = True
-      xdd, xdeg, xmin, xsec = getDD(xDegrees, xMinutes, xSeconds, xIsNeg)
-      ydd, ydeg, ymin, ysec = getDD(yDegrees, yMinutes, ySeconds, yIsNeg)
-      # Convert to desired format
-      dd = (xdd, ydd)
-      xdms = (xdeg, xmin, xsec, xdir)
-      ydms = (ydeg, ymin, ysec, ydir)  
-      # Get date
-      dtstr = tags[DATE_KEY].values
-      [yr, mo, day] = [int(x) for x in dtstr.split(':')]
+      dd, xdms, ydms = getDD(tags)
+      yr, mo, day = getDate(tags)
    return [yr, mo, day], dd, xdms, ydms
 
 # .............................................................................

@@ -18,15 +18,7 @@ dir2016 = '2016AnayaPics'
 dir2017 = '2017AnayaPics'
 
 
-SHAPEFILENAME = 'anaya_springs2019.shp'
-#inpath = inpath + '/58_RL-Gerview'
-
-# fnames = ['201411_anaya20141103_0017.JPG', '201411_anaya20141103_0021.JPG', 
-#              '201411_anaya20141103_0025.JPG', '201411_anaya20141103_0018.JPGx', 
-#              '201411_anaya20141103_0022.JPG', 'top-bot20141103_0100.JPG', 
-#              '201411_anaya20141103_0019.JPG', '201411_anaya20141103_0023.JPG', 
-#              'top-bot20141103_0101.JPG', '201411_anaya20141103_0020.JPG', 
-#              '201411_anaya20141103_0024.JPG', 'top-bot20141103_0102.JPG']
+OUTNAME = 'anaya_springs2019'
 
 X_KEY = 'GPS GPSLongitude'
 X_DIR_KEY = 'GPS GPSLongitudeRef'
@@ -39,20 +31,20 @@ LONGITUDE_FIELDNAME = 'longitude'
 LATITUDE_FIELDNAME = 'latitude'
 
 FIELDS = [('arroyo', ogr.OFTString), 
-             ('fullpath', ogr.OFTString), 
-             ('relpath', ogr.OFTString), 
-             ('basename', ogr.OFTString),
-             (GEOMETRY_WKT, ogr.OFTString),
-             (LONGITUDE_FIELDNAME, ogr.OFTReal), 
-             (LATITUDE_FIELDNAME, ogr.OFTReal), 
-             ('xdirection', ogr.OFTString),
-             ('xdegrees', ogr.OFTReal), 
-             ('xminutes', ogr.OFTReal), 
-             ('xseconds', ogr.OFTReal), 
-             ('ydirection', ogr.OFTString),
-             ('ydegrees', ogr.OFTReal), 
-             ('yminutes', ogr.OFTReal), 
-             ('yseconds', ogr.OFTReal)]
+          ('fullpath', ogr.OFTString), 
+          ('relpath', ogr.OFTString), 
+          ('basename', ogr.OFTString),
+          (GEOMETRY_WKT, ogr.OFTString),
+          (LONGITUDE_FIELDNAME, ogr.OFTReal), 
+          (LATITUDE_FIELDNAME, ogr.OFTReal), 
+          ('xdirection', ogr.OFTString),
+          ('xdegrees', ogr.OFTReal), 
+          ('xminutes', ogr.OFTReal), 
+          ('xseconds', ogr.OFTReal), 
+          ('ydirection', ogr.OFTString),
+          ('ydegrees', ogr.OFTReal), 
+          ('yminutes', ogr.OFTReal), 
+          ('yseconds', ogr.OFTReal)]
 
 # ...............................................
 def getDate(tags):
@@ -90,6 +82,24 @@ def getDD(tags):
     
     return dd, xdms, ydms
     
+# ...............................................
+def _open_kml_file(fname):
+    if os.path.exists(fname):
+        os.remove(fname)
+    foldername, _ = os.path.splitext(os.path.basename(fname))
+    f = open(fname, 'w')
+    f.write('<?xml version="1.0" encoding="utf-8" ?>\n')
+    f.write('<kml xmlns="http://www.opengis.net/kml/2.2">\n')
+    f.write('<Document id="root_doc">\n')
+    f.write('<Folder><name>{}</name>\n'.format(foldername))
+    return f
+
+# ...............................................
+def _close_kml_file(kmlf):
+    kmlf.write('</Folder>\n')
+    kmlf.write('</Document></kml>\n')
+    kmlf.close()
+
 # ...............................................
 def _createLayer(fields, shpFname):
     ogr.RegisterAll()
@@ -153,23 +163,55 @@ def createFeatureInLayer(lyr, fname, pointdata, start_idx):
         feat.Destroy()
         
 # ...............................................
-def createShapefileAndKML(fields, shpfname, imageData, start_idx):
-    dataset = None
+def createFeatureInKML(kmlf, fname, pointdata, start_idx):
+    """
+    <img style="max-width:500px;" 
+     src="file:///Users/astewart/Home/2017AnayaPics/18-LL-Spring/SpringL1-20150125_0009.JPG">
+     SpringL1-20150125_0009 in 18-LL-Spring on 2015-1-25
+    """
+    ([yr, mo, day], (xdd, ydd), xvals, yvals) = pointdata
+    pth, basefname = os.path.split(fname)
+    basename, _ = os.path.splitext(basefname)
+    relativePath = fname[start_idx:]
+    url = 'http://129.237.183.10/images/'
+    tmp, lastArroyo = os.path.split(pth)
+    dt = '{}-{}-{}'.format(yr, mo, day)
+
+    kmlf.write('  <Placemark>\n')
+    kmlf.write('    <name>{}</name>\n'.format(basefname))
+    kmlf.write('    <description>{} in {} on {}</description>\n'.format(basename, lastArroyo, dt))
+#     kmlf.write('    <img style="max-width:500px;" src="file://{}">\n'.format(fname))
+    kmlf.write('    <img style="max-width:500px;" src="{}{}">\n'.format(url, relativePath)) 
+        
+    kmlf.write('    <Point>\n')
+    kmlf.write('      <coordinates>{},{}</coordinates>\n'.format(xdd, ydd))
+    kmlf.write('    </Point>\n')
+
+    kmlf.write('  </Placemark>\n')
+        
+        
+# ...............................................
+def createShapefileAndKML(fields, shpfname, kmlfname, imageData, start_idx):
+    kmlf = _open_kml_file(kmlfname)
     dataset, lyr = _createLayer(fields, shpfname)
+    
     for fname, pointdata in imageData.iteritems():
-        feat = createFeatureInLayer(lyr, fname, pointdata, start_idx)
+        print('Writing feature {}'.format(fname))
+        createFeatureInKML(kmlf, fname, pointdata)
+        createFeatureInLayer(lyr, fname, pointdata, start_idx)
+        
+    _close_kml_file(kmlf)
     if dataset is not None:
         dataset.Destroy()
         print('Closed/wrote dataset %s' % shpfname)
         success = True
+    
     return success
 
 
 # ...............................................
 def processImageFile(log, fullname):
     dd = xdms = ydms = yr = mo = day = None
-#     tmp, ext = os.path.splitext(fullname)
-#     if ext in ('.jpg', '.JPG'):
     try:
         # Open image file for reading (binary mode)
         f = open(fullname, 'rb')
@@ -192,28 +234,34 @@ def processImageFile(log, fullname):
 # .............................................................................
 # .............................................................................
 
+sep = '_'
 scriptname = os.path.splitext(os.path.basename(__file__))[0]
 logfname = os.path.join(outpath, scriptname+'.log')
 # log = open(logfname, 'w')
 log = None
-shpfname = os.path.join(outpath, SHAPEFILENAME)
+start_idx = len(inpath)
 
-imageData = {}
-
-for dir in (dir2015, dir2016, dir2017):
+# for dir in (dir2015, dir2016, dir2017):
+for dir in [dir2017]:
+    this_year = dir[:4]
+    this_fname = OUTNAME + sep + this_year 
+    shpfname = os.path.join(outpath, this_fname + '.shp')
+    kmlfname = os.path.join(outpath, this_fname + '.kml')
+    
+    # Read data
+    imageData = {}
     thispath = os.path.join(inpath, dir)
     for root, dirs, files in os.walk(thispath):
         for fname in files:
             if fname.endswith('jpg') or fname.endswith('JPG'): 
                 fullname = os.path.join(root, fname)
-                print('Processing {}'.format(fullname))
+                print('Reading {}'.format(fullname))
                 [yr, mo, day], dd, xdms, ydms = processImageFile(log, fullname)
                 if dd is not None:
                     imageData[fullname] = ([yr, mo, day], dd, xdms, ydms)
-        
 
-start_idx = len(inpath)
-createShapefileAndKML(FIELDS, shpfname, imageData, start_idx)
+    # Write data
+    createShapefileAndKML(FIELDS, shpfname, kmlfname, imageData, start_idx)
 
 # for root, dirs, files in os.walk(testpath):
 #     relpath = fullname[start_idx:]

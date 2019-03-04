@@ -19,6 +19,7 @@ class PicMapper(object):
     """
     Class to write a shapefile from GBIF CSV output or BISON JSON output 
     export p3=/Library/Frameworks/Python.framework/Versions/3.7/bin/python3.7
+    Yelp help: https://engineeringblog.yelp.com/2017/06/making-photos-smaller.html
     """    
     GEOMETRY_WKT = "geomwkt"
     LONGITUDE_FIELDNAME = 'longitude'
@@ -48,16 +49,21 @@ class PicMapper(object):
                  do_kml=True, do_shape=False, logger=None):
         """
         @param image_path: Root path for image files to be processed
-        @param image_buffer: Buffer in which images are considered to be the same location
-        @param bbox: Tuple of the bounds of the output data, in 
-                     (minx, miny, maxX, maxY) format.  Outside these bounds, 
-                     images will be discarded
+        @param image_buffer: Buffer in which images are considered to be the 
+               same location
+        @param bbox: Bounds of the output data, in (minX, minY, maxX, maxY) 
+               format.  Outside these bounds, images will be discarded
         @param do_kml: Do or not create a KML file for Google Earth
         @param do_shape: Do or not create a GIS shapefile
         """
         self.image_path = image_path
         self.buffer_distance = buffer_distance
         self.bbox = bbox
+        # Compute actual bounds of the data
+        self._minX = bbox[0]
+        self._minY = bbox[1]
+        self._maxX = bbox[2]
+        self._maxY = bbox[3]
         self.do_kml = do_kml
         self.do_shape = do_shape
         self._logger = logger
@@ -228,16 +234,6 @@ class PicMapper(object):
         kmlf.write('    <img style="max-width:500px;" src="file://{}"></img>\n'.format(fname))
         kmlf.write('    <Point><coordinates>{},{}</coordinates></Point>\n'.format(xdd, ydd))
         kmlf.write('  </Placemark>\n')
-            
-    # ...............................................
-    def _reduceImageSize(self, infname, outfname):
-        basewidth = 500
-        img = Image.open(infname)
-        wpercent = (basewidth / float(img.size[0]))
-        hsize = int((float(img.size[1]) * float(wpercent)))
-        img = img.resize((basewidth, hsize), Image.ANTIALIAS)
-        img.save(outfname)
-        print('Rewrote image {} to {}'.format(infname, outfname))
         
     # ...............................................
     def _testBufferAddLocation(self, all_coords, currfname, currpointdata):
@@ -286,7 +282,7 @@ class PicMapper(object):
     
     
     # ...............................................
-    def processImageFile(self, fullname):
+    def getImageMetadata(self, fullname):
         dd = xdms = ydms = yr = mo = day = None
         try:
             # Open image file for reading (binary mode)
@@ -308,41 +304,84 @@ class PicMapper(object):
         return [yr, mo, day], dd, xdms, ydms
     
     # ...............................................
-    def evaluateExtent(self, dd, minX, minY, maxX, maxY):
-        if dd[0] < minX:
-            minX = dd[0]
-        if dd[0] > maxX:
-            maxX = dd[0]
-            
-        if dd[1] < minY:
-            minY = dd[1]
-        if dd[1] > maxY:
-            maxY = dd[1]
-        return minX, minY, maxX, maxY
-    
-#     # ...............................................
-#     def reduceAllImages(self, imageData, outpath, start_idx):
-#         for infname, pointdata in imageData.iteritems():
-#             relativePath = infname[start_idx:]
-#             outfname = os.path.join(outpath, relativePath)
-#             print('Rewriting image {} to {}'.format(infname, outfname))
-#             self._reduceImageSize(infname, outfname)
+    def evaluateExtent(self, dd):
+        if self._minX is None:
+            self._minX = dd[0]
+            self._maxX = dd[0]
+            self._minY = dd[1]
+            self._maxY = dd[1]
+        else:
+            if dd[0] < self._minX:
+                self._minX = dd[0]
+            if dd[0] > self._maxX:
+                self._maxX = dd[0]
+                
+            if dd[1] < self._minY:
+                self._minY = dd[1]
+            if dd[1] > self._maxY:
+                self._maxY = dd[1]
     
     # ...............................................
-    def readAllImages(self, inpath):
-        minX = minY = 9999
-        maxX = maxY = -9999
-        imageData = {}
-        for root, dirs, files in os.walk(inpath):
+    def parse_filename(self, root, fname):
+        name = ''
+        dt = ''
+        count = ''
+        oncount = False
+        _, arroyo = os.path.split(root)
+        arroyo_num, arroyo_name = arroyo.split(')')
+        for ch in fname:
+            try:
+                int(ch)
+                if oncount:
+                    count += ch
+                else:
+                    dt += ch
+            except:
+                if ch == '_':
+                    oncount = True
+                else:
+                    name += ch
+        year = int(dt[:4])
+        picnum = int(count)
+        return arroyo_num, arroyo_name, name, year, picnum    
+        
+    # ...............................................
+    def processAllImages(self, resize_width=500, resize_path=None):
+        """
+        {arroyo_name: {num: <arroyo_num>, fullname: ([yr, mo, day], dd, xdms, ydms),
+                                          ...
+                                          fullname: ([yr, mo, day], dd, xdms, ydms)}
+        }
+        """
+        if resize_path.endswith('/'):
+            resize_path = resize_path[:-1]
+        image_data = {}
+        for root, dirs, files in os.walk(self.image_path):
             for fname in files:
                 if fname.endswith('jpg') or fname.endswith('JPG'): 
-                    fullname = os.path.join(root, fname)
-#                     self._log('Reading {}'.format(fullname))
-                    [yr, mo, day], dd, xdms, ydms = pm.processImageFile(fullname)
-                    if dd is not None:
-                        minX, minY, maxX, maxY = pm.evaluateExtent(dd, minX, minY, maxX, maxY)
-                        imageData[fullname] = ([yr, mo, day], dd, xdms, ydms)
-        return imageData
+                    orig_fname = os.path.join(root, fname)
+                    
+                    arroyo_num, arroyo_name, name, year, picnum = self.parse_filename(root, fname)
+                    if not image_data.has_key(arroyo_name):
+                        image_data[arroyo_name] = {'num': arroyo_num}
+                    else:
+                        image_data[arroyo_name]['num'] = arroyo_num
+                        
+                    [yr, mo, day], dd, xdms, ydms = self.getImageMetadata(orig_fname)
+                    if dd is None:
+                        return {}
+                    
+                    self.evaluateExtent(dd)
+                    if resize_path is not None:
+                        # includes trailing /
+                        rel_fname = orig_fname[len(self.image_path):]
+                        resize_fname = resize_path + rel_fname
+                        reduceImageSize(orig_fname, resize_fname, resize_width, Image.ANTIALIAS)
+                        image_data[arroyo_name][resize_fname] =  ([yr, mo, day], dd, xdms, ydms)
+                    else:
+                        image_data[arroyo_name][resize_fname] =  ([yr, mo, day], dd, xdms, ydms)
+                        
+        return image_data
 
 # .............................................................................
 def getLogger(outpath):
@@ -390,22 +429,51 @@ def getBbox(bbox_str):
                 bbox.append(val)
     return bbox
         
+# ...............................................
+def readyFilename(fullfilename, overwrite=True):
+    if os.path.exists(fullfilename):
+        if overwrite:
+            try:
+                os.remove(fullfilename)
+            except Exception as e:
+                raise Exception('Unable to delete {} ({})'.format(fullfilename, e))
+            else:
+                return True
+        else:
+            return False
+    else:
+        pth, basename = os.path.split(fullfilename)
+        try:
+            os.makedirs(pth)
+        except:
+            pass
+            
+        if os.path.isdir(pth):
+            return True
+        else:
+            raise Exception('Failed to create directories {}'.format(pth))
+
+# ...............................................
+def reduceImageSize(infname, outfname, width, sample_method):
+    readyFilename(outfname, overwrite=True)
+    img = Image.open(infname)
+    wpercent = (width / float(img.size[0]))
+    height = int((float(img.size[1]) * float(wpercent)))
+    size = (width, height)
+    img = img.resize(size, sample_method)
+    img.save(outfname)
+    print('Rewrote image {} to {}'.format(infname, outfname))
 
 
 # .............................................................................
 # .............................................................................
 # ...............................................
 if __name__ == '__main__':
-    OUTPATH = '/Users/astewart/Google Drive/Shared/Anaya_Springs/process2019/'
+    INPATH = '/Users/astewart/Home/anaya_pics/'
+    SMALLPATH = '/Users/astewart/Home/anaya_pics_sm/'
+    OUTPATH = '/Users/astewart/Home/AnayaGE'
     OUTNAME = 'dam_anaya'
-    KML_PATH = '/Users/astewart/Home/AnayaGE'
-    IMAGE_PATHS = [
-    #     (2015, '/Users/astewart/Home/2015AnayaPics'),
-    #     (2016, '/Users/astewart/Home/2016AnayaPics'),
-        (2017, '/Users/astewart/Home/2017AnayaPics')]
-    SAT_IMAGE_FNAME = '/Users/astewart/Google Drive/Shared/Anaya_Springs/satellite/op140814.tif'
-    SAT_DIR = 'satellite'
-    ANC_DIR = 'ancillary'
+    SAT_IMAGE_FNAME = '/Users/astewart/Home/AnayaGE/satellite/op140814.tif'
     
     maxY = 35.45045
     minY = 35.43479
@@ -428,7 +496,7 @@ if __name__ == '__main__':
     parser.add_argument('--bbox', type=str, 
                         default="({}, {}, {}, {})".format(minX, minY, maxX, maxY),
              help=("""Tuple of the bounds of the output data, in 
-                     (minx, miny, maxX, maxY) format.  Outside these bounds, 
+                     (minX, minY, maxX, maxY) format.  Outside these bounds, 
                      images will be discarded"""))
     parser.add_argument('--do_kml', type=bool, default=True,
              help=('Boolean flag to create a KML file for Google Earth'))
@@ -442,31 +510,29 @@ if __name__ == '__main__':
     kml_flag = args.do_kml
     shp_flag = args.do_shape
 
-    base_path = '/Users/astewart/Home/'
     sep = '_'
     bbox = getBbox(bbox_str)
     
-    pm = PicMapper(base_path, buffer_distance=buffer_distance, 
+    pm = PicMapper(image_path, buffer_distance=buffer_distance, 
                    bbox=(minX, minY, maxX, maxY), 
                    do_kml=kml_flag, do_shape=shp_flag)
     
-    for yr, indir in IMAGE_PATHS:
-        pm.image_path = indir
-        
-        this_fname = OUTNAME + sep + str(yr) 
-        shpfname = os.path.join(OUTPATH, this_fname + '.shp')
-        kmlfname = os.path.join(KML_PATH, this_fname + '.kml')
-        start_idx = len(indir)
-        
-        # Read data
-        imageData = pm.readAllImages(indir)
+
+    shpfname = os.path.join(OUTPATH, OUTNAME + '.shp')
+    kmlfname = os.path.join(OUTPATH, OUTNAME + '.kml')
     
-        # Reduce image sizes
-        outdir = os.path.join(KML_PATH, str(yr))
-        print indir, outdir
-        
-        # Write data
-        pm.createShapefileAndKML(outdir, shpfname, kmlfname, imageData, start_idx)
+    # Read data
+    imageData = pm.processAllImages(resize_width=500, resize_path=SMALLPATH)
+    print('Given: {} {} {} {}'.format(pm.bbox[0], pm.bbox[1], pm.bbox[2], pm.bbox[3]))
+    print('Computed: '.format(pm._minX, pm._minY, pm._maxX, pm._maxY))
+
+    # Reduce image sizes
+    t = time.localtime()
+    stamp = '{}_{}_{}-{}_{}'.format(t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min)
+
+    
+#     # Write data
+#     pm.createShapefileAndKML(outdir, shpfname, kmlfname, imageData, start_idx)
      
 
 

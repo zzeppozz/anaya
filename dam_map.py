@@ -16,7 +16,7 @@ class IMG_META:
 class PicMapper(object):
 # .............................................................................
     """
-    Class to write a shapefile from GBIF CSV output or BISON JSON output 
+    Class to write a KML file from a directory of georeferenced images
     export p3=/Library/Frameworks/Python.framework/Versions/3.7/bin/python3.7
     Yelp help: https://engineeringblog.yelp.com/2017/06/making-photos-smaller.html
     """    

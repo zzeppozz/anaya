@@ -1,9 +1,36 @@
+#!/Library/Frameworks/Python.framework/Versions/2.7/bin/python
+
+# Script dependency locations
+p2_gdal_loc = '/Library/Frameworks/GDAL.framework/Versions/2.1/Python/2.7/site-packages'
+p2_pil_loc = '/Library/Python/2.7/site-packages/'
+
+import sys
+sys.path.insert(0, p2_gdal_loc)
+sys.path.insert(0, p2_pil_loc)
+
 import exifread
 import os
 from osgeo import ogr, osr
 import logging
+from logging.handlers import RotatingFileHandler
 from PIL import Image
 import time
+
+BASE_PATH='/Users/astewart/Home/Anaya'
+IN_DIR = 'anaya_pics'
+THUMB_DIR = 'anaya_thumbs'
+OUT_DIR = 'AnayaGE'
+OUTNAME = 'dam_anaya'
+SAT_FNAME = 'satellite/op140814.tif'
+
+# LOG_FORMAT = ' '.join(["%(asctime)s",
+#                    "%(threadName)s.%(module)s.%(funcName)s",
+#                    "line",
+#                    "%(lineno)d",
+#                    "%(levelname)-8s",
+#                    "%(message)s"])
+# 
+# LOG_DATE_FORMAT = '%d %b %Y %H:%M'
 
 # .............................................................................
 class IMG_META:
@@ -45,16 +72,14 @@ class PicMapper(object):
 # ............................................................................
 # Constructor
 # .............................................................................
-    def __init__(self, image_path, buffer_distance=.002, bbox=(-180, -90, 180, 90), 
-                 do_kml=True, do_shape=False, logger=None):
+    def __init__(self, image_path, buffer_distance=.002, 
+                 bbox=(-180, -90, 180, 90), logger=None):
         """
         @param image_path: Root path for image files to be processed
         @param image_buffer: Buffer in which images are considered to be the 
                same location
         @param bbox: Bounds of the output data, in (minX, minY, maxX, maxY) 
                format.  Outside these bounds, images will be discarded
-        @param do_kml: Do or not create a KML file for Google Earth
-        @param do_shape: Do or not create a GIS shapefile
         """
         self.image_path = image_path
         self.buffer_distance = buffer_distance
@@ -64,8 +89,6 @@ class PicMapper(object):
         self._minY = bbox[1]
         self._maxX = bbox[2]
         self._maxY = bbox[3]
-        self.do_kml = do_kml
-        self.do_shape = do_shape
         self._logger = logger
     
     # ...............................................
@@ -130,7 +153,7 @@ class PicMapper(object):
         f.write('   <GroundOverlay>\n')
         f.write('      <name>Satellite overlay on terrain</name>\n')
         f.write('      <description>Local imagery</description>\n')
-        f.write('      <Icon><href>{}</href></Icon>\n'.format(SAT_IMAGE_FNAME))
+        f.write('      <Icon><href>{}</href></Icon>\n'.format(SAT_FNAME))
         f.write('      <LatLonBox>\n')
         f.write('         <north>{}</north>\n'.format(maxY))
         f.write('         <south>{}</south>\n'.format(minY))
@@ -346,6 +369,42 @@ class PicMapper(object):
         return arroyo_num, arroyo_name, name, year, picnum    
         
     # ...............................................
+    def parse_relfname(self, relfname):
+        datechars = []
+        namechars = []
+        icntchars = []
+        oncount = False
+        
+        parts = relfname.split(os.path.pathsep)
+        arroyo = parts[0]
+        arroyo_num, arroyo_name = arroyo.split(')')
+        basename, ext = os.path.splitext(parts[-1])
+        
+        if len(parts) == 2:
+            self._log('Relative path contains 2')
+        else:
+            self._log('Relative path parts {}'.format(parts))
+        
+        for ch in basename:
+            try:
+                int(ch)
+                if oncount:
+                    datechars.append(ch)
+                else:
+                    icntchars.append(ch)
+            except:
+                if ch == '_':
+                    oncount = True
+                else:
+                    namechars.append(ch)
+                    
+        name = namechars.join('')
+        date = datechars.join('')
+        picnum = int(icntchars.join(''))
+        
+        return arroyo_num, arroyo_name, name, date, picnum    
+        
+    # ...............................................
     def processAllImages(self, resize_width=500, resize_path=None):
         """
         {arroyo_name: {num: <arroyo_num>, fullname: ([yr, mo, day], dd, xdms, ydms),
@@ -356,6 +415,92 @@ class PicMapper(object):
         if resize_path.endswith('/'):
             resize_path = resize_path[:-1]
         image_data = {}
+        for root, dirs, files in os.walk(self.image_path):
+            for fname in files:
+                if fname.endswith('jpg') or fname.endswith('JPG'): 
+                    orig_fname = os.path.join(root, fname)
+                    
+                    arroyo_num, arroyo_name, name, year, picnum = \
+                        self.parse_filename(root, fname)
+                        
+                    if not image_data.has_key(arroyo_name):
+                        image_data[arroyo_name] = {'num': arroyo_num}
+                    else:
+                        image_data[arroyo_name]['num'] = arroyo_num
+                        
+                    [yr, mo, day], dd, xdms, ydms = self.getImageMetadata(orig_fname)
+                    if dd is None:
+                        return {}
+                    
+                    self.evaluateExtent(dd)
+                    if resize_path is not None:
+                        # includes trailing /
+                        rel_fname = orig_fname[len(self.image_path):]
+                        resize_fname = resize_path + rel_fname
+                        reduceImageSize(orig_fname, resize_fname, resize_width, Image.ANTIALIAS)
+                        image_data[arroyo_name][resize_fname] =  ([yr, mo, day], dd, xdms, ydms)
+                    else:
+                        image_data[arroyo_name][resize_fname] =  ([yr, mo, day], dd, xdms, ydms)
+                        
+        return image_data    
+    
+    # ...............................................
+    def gather_image_data(self):
+        """
+        {rel_fname: {}
+        }
+        """
+        startidx = len(BASE_PATH)
+        all_data = {'BASE_PATH': BASE_PATH,
+                    'arroyos': None,
+                    'dam_count': None,
+                    'images': []}
+        arroyos = {}
+        img_meta = {}
+        for root, dirs, files in os.walk(self.image_path):
+            for fname in files:
+                if fname.endswith('jpg') or fname.endswith('JPG'): 
+                    fullfname = os.path.join(root, fname)
+                    relfname = fullfname[len(BASE_PATH):]
+                    
+                    arroyo_num, arroyo_name, dam_name, dam_year, picnum = \
+                        self.parse_relfname(relfname)
+                        
+                    try:
+                        arroyos[arroyo_name].append(relfname)
+                    except:
+                        arroyos[arroyo_name] = [relfname]
+                                                
+                    [yr, mo, day], dd, xdms, ydms = self.getImageMetadata(fullfname)
+                    img_meta[relfname] = {'arroyo': arroyo_name,
+                                          'arroyo#': arroyo_num,
+                                          'dam': dam_name,
+                                          'dam_year': dam_year,
+                                          'img_date': [yr, mo, day],
+                                          'dec_deg': dd,
+                                          'x_dms': xdms,
+                                          'y_dms': ydms }
+                    if dd is None:
+                        self._log('Failed to return decimal degrees for {}'.format(relfname))
+                    else:
+                        self.evaluateExtent(dd)
+                    all_data['images'].append(img_meta) 
+        all_data['arroyo_count'] = len(arroyos.keys())
+        return all_data    
+    
+    # ...............................................
+    def resize_images(self, resize_path, image_data, resize_width=500):
+        """
+        {arroyo_name: {num: <arroyo_num>, fullname: ([yr, mo, day], dd, xdms, ydms),
+                                          ...
+                                          fullname: ([yr, mo, day], dd, xdms, ydms)}
+        }
+        """
+        if resize_path.endswith('/'):
+            resize_path = resize_path[:-1]
+
+#         for arroyo in image_data.keys():
+#             for 
         for root, dirs, files in os.walk(self.image_path):
             for fname in files:
                 if fname.endswith('jpg') or fname.endswith('JPG'): 
@@ -392,23 +537,29 @@ def getLogger(outpath):
                        "%(levelname)-8s",
                        "%(message)s"])
     LOG_DATE_FORMAT = '%d %b %Y %H:%M'
-    # get name
+    maxsize = 52000000
+    level = logging.DEBUG
+    
+    # get log filename
     scriptname, _ = os.path.splitext(os.path.basename(__file__))
     secs = time.time()
     timestamp = "{}".format(time.strftime("%Y%m%d-%H%M", time.localtime(secs)))
     logname = '{}.{}'.format(scriptname, timestamp)
     logfname = os.path.join(outpath, logname + '.log')
+    
     # get logger
     log = logging.getLogger(logname)
-    log.setLevel(logging.DEBUG)
-    fileLogHandler = logging.handlers.RotatingFileHandler(logfname, 
-                                            maxBytes=52000000, backupCount=2)
+    log.setLevel(level)
+    
     # add file handler
-    fileLogHandler.setLevel(logging.DEBUG)
+    fileLogHandler = RotatingFileHandler(logfname, maxBytes=maxsize, backupCount=2)
+    fileLogHandler.setLevel(level)
     formatter = logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT)
     fileLogHandler.setFormatter(formatter)
     log.addHandler(fileLogHandler)
+    
     return log
+
 
 # .............................................................................
 def getBbox(bbox_str):
@@ -468,61 +619,33 @@ def reduceImageSize(infname, outfname, width, sample_method):
 # .............................................................................
 # .............................................................................
 # ...............................................
-if __name__ == '__main__':
-    INPATH = '/Users/astewart/Home/anaya_pics/'
-    SMALLPATH = '/Users/astewart/Home/anaya_pics_sm/'
-    OUTPATH = '/Users/astewart/Home/AnayaGE'
-    OUTNAME = 'dam_anaya'
-    SAT_IMAGE_FNAME = '/Users/astewart/Home/AnayaGE/satellite/op140814.tif'
-    
+if __name__ == '__main__':    
     maxY = 35.45045
     minY = 35.43479
     maxX = -106.05353
     minX = -106.07259
     
     dam_buffer = .0002
-
-    import argparse
-    parser = argparse.ArgumentParser(
-             description=(""""Read a directory full of image files, then for 
-             each image, gather metadata, optionally rewrite the image as a
-             smaller file, and write as a feature in a KML file, Shapefiles, or 
-             both."""))
-    parser.add_argument('image_path', default=None,
-             help=('Root path for image files to be processed.'))
-    parser.add_argument('--buffer', type=float, default=dam_buffer,
-             help=("""Buffer distance in decimal degrees, in which images can 
-             be considered to be the same location"""))
-    parser.add_argument('--bbox', type=str, 
-                        default="({}, {}, {}, {})".format(minX, minY, maxX, maxY),
-             help=("""Tuple of the bounds of the output data, in 
-                     (minX, minY, maxX, maxY) format.  Outside these bounds, 
-                     images will be discarded"""))
-    parser.add_argument('--do_kml', type=bool, default=True,
-             help=('Boolean flag to create a KML file for Google Earth'))
-    parser.add_argument('--do_shape', type=bool, default=False,
-             help=('Boolean flag to create shapefiles for GIS applications'))
-    args = parser.parse_args()
+    resize_width = 500
     
-    image_path = args.image_path
-    buffer_distance = args.buffer
-    bbox_str = args.bbox
-    kml_flag = args.do_kml
-    shp_flag = args.do_shape
+#     log = getLogger(os.path.join(BASE_PATH, OUT_DIR))
+    log = None
+    image_path = os.path.join(BASE_PATH, IN_DIR)
+    resize_path= os.path.join(BASE_PATH, THUMB_DIR)
+    bbox = (minX, minY, maxX, maxY)
 
     sep = '_'
-    bbox = getBbox(bbox_str)
     
-    pm = PicMapper(image_path, buffer_distance=buffer_distance, 
-                   bbox=(minX, minY, maxX, maxY), 
-                   do_kml=kml_flag, do_shape=shp_flag)
+    pm = PicMapper(image_path, buffer_distance=dam_buffer, 
+                   bbox=bbox, logger=log)
+    image_data = pm.gather_image_data()
     
 
-    shpfname = os.path.join(OUTPATH, OUTNAME + '.shp')
-    kmlfname = os.path.join(OUTPATH, OUTNAME + '.kml')
+    shpfname = os.path.join(BASE_PATH, OUT_DIR, OUTNAME + '.shp')
+    kmlfname = os.path.join(BASE_PATH, OUT_DIR, OUTNAME + '.kml')
     
     # Read data
-    imageData = pm.processAllImages(resize_width=500, resize_path=SMALLPATH)
+    image_data = pm.gather_image_data()
     print('Given: {} {} {} {}'.format(pm.bbox[0], pm.bbox[1], pm.bbox[2], pm.bbox[3]))
     print('Computed: '.format(pm._minX, pm._minY, pm._maxX, pm._maxY))
 
@@ -537,6 +660,62 @@ if __name__ == '__main__':
 
 
 '''
+p2_gdal_loc = '/Library/Frameworks/GDAL.framework/Versions/2.1/Python/2.7/site-packages'
+p2_pil_loc = '/Library/Python/2.7/site-packages/'
+
+import sys
+sys.path.insert(0, p2_gdal_loc)
+sys.path.insert(0, p2_pil_loc)
+
+import exifread
+import os
+from osgeo import ogr, osr
+import logging
+from PIL import Image
+import time
+
+from georef import PicMapper, getBbox, getLogger, readyFilename, reduceImageSize
+
+IN_PATH = '/Users/astewart/Home/anaya_pics/'
+THUMB_PATH = '/Users/astewart/Home/anaya_thumbs/'
+OUT_PATH = '/Users/astewart/Home/AnayaGE'
+OUTNAME = 'dam_anaya'
+SAT_IMAGE_FNAME = '/Users/astewart/Home/AnayaGE/satellite/op140814.tif'
+kml_flag = False
+shp_flag = False
+csv_flag = True
+
+maxY = 35.45045
+minY = 35.43479
+maxX = -106.05353
+minX = -106.07259
+
+dam_buffer = .0002
+
+image_path = IN_PATH
+buffer_distance = dam_buffer
+bbox = (minX, minY, maxX, maxY)
+
+sep = '_'
+
+
+pm = PicMapper(image_path, buffer_distance=buffer_distance, 
+               bbox=(minX, minY, maxX, maxY), 
+               do_kml=kml_flag, do_shape=shp_flag)
+
+
+shpfname = os.path.join(OUTPATH, OUTNAME + '.shp')
+kmlfname = os.path.join(OUTPATH, OUTNAME + '.kml')
+
+# Read data
+imageData = pm.processAllImages(resize_width=500, resize_path=THUMB_PATH)
+print('Given: {} {} {} {}'.format(pm.bbox[0], pm.bbox[1], pm.bbox[2], pm.bbox[3]))
+print('Computed: '.format(pm._minX, pm._minY, pm._maxX, pm._maxY))
+
+# Reduce image sizes
+t = time.localtime()
+stamp = '{}_{}_{}-{}_{}'.format(t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min)
+
 #SCHEMA#
 <Schema name="anaya_springs" id="anaya_springs">
           <SimpleField name="arroyo" type="string"></SimpleField>

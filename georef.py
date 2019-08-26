@@ -8,6 +8,7 @@ import sys
 sys.path.insert(0, p2_gdal_loc)
 sys.path.insert(0, p2_pil_loc)
 
+import csv
 import exifread
 import os
 from osgeo import ogr, osr
@@ -16,6 +17,11 @@ from logging.handlers import RotatingFileHandler
 from PIL import Image
 import time
 
+GEOM_WKT = "geomwkt"
+LONG_FLD = 'longitude'
+LAT_FLD = 'latitude'
+
+DELIMITER = '\t'
 BASE_PATH='/Users/astewart/Home/Anaya'
 IN_DIR = 'anaya_pics'
 THUMB_DIR = 'anaya_thumbs'
@@ -47,19 +53,16 @@ class PicMapper(object):
     Class to write a shapefile from GBIF CSV output or BISON JSON output 
     export p3=/Library/Frameworks/Python.framework/Versions/3.7/bin/python3.7
     Yelp help: https://engineeringblog.yelp.com/2017/06/making-photos-smaller.html
-    """    
-    GEOMETRY_WKT = "geomwkt"
-    LONGITUDE_FIELDNAME = 'longitude'
-    LATITUDE_FIELDNAME = 'latitude'
-    
+    """
+    IMAGES_KEY = 'images'
     FIELDS = [('arroyo', ogr.OFTString), 
               ('fullpath', ogr.OFTString), 
               ('relpath', ogr.OFTString), 
               ('basename', ogr.OFTString),
-              ('imgdate', ogr.OFTString),
-              (GEOMETRY_WKT, ogr.OFTString),
-              (LONGITUDE_FIELDNAME, ogr.OFTReal), 
-              (LATITUDE_FIELDNAME, ogr.OFTReal), 
+              ('img_date', ogr.OFTString),
+              (GEOM_WKT, ogr.OFTString),
+              (LONG_FLD, ogr.OFTReal), 
+              (LAT_FLD, ogr.OFTReal), 
               ('xdirection', ogr.OFTString),
               ('xdegrees', ogr.OFTReal), 
               ('xminutes', ogr.OFTReal), 
@@ -68,6 +71,12 @@ class PicMapper(object):
               ('ydegrees', ogr.OFTReal), 
               ('yminutes', ogr.OFTReal), 
               ('yseconds', ogr.OFTReal)]
+    
+    CSV_FIELDS = ('arroyo', 'arroyo_num', 'dam', 'dam_num', 'dam_date', 
+                  'img_date', LONG_FLD, LAT_FLD, GEOM_WKT, 
+                  'xdirection', 'xdegrees', 'xminutes', 'xseconds',
+                  'ydirection', 'ydegrees', 'yminutes', 'yseconds',
+                  'fullpath')
 
 # ............................................................................
 # Constructor
@@ -305,7 +314,7 @@ class PicMapper(object):
     
     
     # ...............................................
-    def getImageMetadata(self, fullname):
+    def get_image_metadata(self, fullname):
         dd = xdms = ydms = yr = mo = day = None
         try:
             # Open image file for reading (binary mode)
@@ -345,6 +354,11 @@ class PicMapper(object):
                 self._maxY = dd[1]
     
     # ...............................................
+    @property
+    def extent(self):
+        return (self._minX, self._minY, self._maxX, self._maxY)
+
+    # ...............................................
     def parse_filename(self, root, fname):
         name = ''
         dt = ''
@@ -370,39 +384,29 @@ class PicMapper(object):
         
     # ...............................................
     def parse_relfname(self, relfname):
-        datechars = []
-        namechars = []
-        icntchars = []
-        oncount = False
-        
-        parts = relfname.split(os.path.pathsep)
+        parts = relfname.split(os.sep)
         arroyo = parts[0]
         arroyo_num, arroyo_name = arroyo.split(')')
         basename, ext = os.path.splitext(parts[-1])
         
-        if len(parts) == 2:
-            self._log('Relative path contains 2')
-        else:
+        if len(parts) != 2:
             self._log('Relative path parts {}'.format(parts))
-        
-        for ch in basename:
+            
+        ntmp, ctmp = basename.split('_')
+        picnum = int(ctmp)
+        for i in range(len(ntmp)):
             try:
-                int(ch)
-                if oncount:
-                    datechars.append(ch)
-                else:
-                    icntchars.append(ch)
+                int(ntmp[i])
+                break
             except:
-                if ch == '_':
-                    oncount = True
-                else:
-                    namechars.append(ch)
-                    
-        name = namechars.join('')
-        date = datechars.join('')
-        picnum = int(icntchars.join(''))
+                pass
+        name = ntmp[:i]
+        dtmp = ntmp[i:]
+        yr = dtmp[:4]
+        mo = dtmp[4:6]
+        dy = dtmp[6:]
         
-        return arroyo_num, arroyo_name, name, date, picnum    
+        return arroyo_num, arroyo_name, name, [yr, mo, dy], picnum    
         
     # ...............................................
     def processAllImages(self, resize_width=500, resize_path=None):
@@ -445,49 +449,91 @@ class PicMapper(object):
         return image_data    
     
     # ...............................................
-    def gather_image_data(self):
+    def read_image_data(self):
         """
-        {rel_fname: {}
-        }
         """
-        startidx = len(BASE_PATH)
         all_data = {'BASE_PATH': BASE_PATH,
                     'arroyos': None,
+                    'img_count': None,
+                    'img_count_geo': None,
                     'dam_count': None,
-                    'images': []}
+                    'dam_count_geo': None,
+                    self.IMAGES_KEY: []}
         arroyos = {}
         img_meta = {}
+        img_count = 0
+        img_count_geo = 0
         for root, dirs, files in os.walk(self.image_path):
             for fname in files:
                 if fname.endswith('jpg') or fname.endswith('JPG'): 
+                    img_count += 1
                     fullfname = os.path.join(root, fname)
-                    relfname = fullfname[len(BASE_PATH):]
-                    
-                    arroyo_num, arroyo_name, dam_name, dam_year, picnum = \
+                    relfname = fullfname[len(self.image_path)+1:]
+                    xdeg = xmin = xsec = xdir = ydeg = ymin = ysec = ydir = wkt = ''
+    
+                    arroyo_num, arroyo_name, dam_name, dam_date, picnum = \
                         self.parse_relfname(relfname)
-                        
+                    [yr, mo, day], (xdd, ydd), xdms, ydms = self.get_image_metadata(fullfname)
+                    
+                    if xdms is not None:
+                        (xdeg, xmin, xsec, xdir) = xdms
+                    if ydms is not None:
+                        (ydeg, ymin, ysec, ydir) = ydms
+                    if xdd is not None and ydd is not None:
+                        wkt = 'Point (%.7f  %.7f)'.format(xdd, ydd)
+                        img_count_geo += 1
+                        self.evaluateExtent((xdd, ydd))
+                    else:
+                        self._log('Failed to return decimal degrees for {}'.format(relfname))
+                    
+                    img_meta[relfname] = {'arroyo': arroyo_name, 
+                                          'arroyo_num': arroyo_num,
+                                          'dam': dam_name,
+                                          'dam_num': picnum,
+                                          'dam_date': dam_date,
+                                          'img_date': [yr, mo, day],
+                                          LONG_FLD: xdd,
+                                          LAT_FLD: ydd,
+                                          GEOM_WKT: wkt,
+                                          'xdirection': xdir,
+                                          'xdegrees': xdeg,
+                                          'xminutes': xmin, 
+                                          'xseconds': xsec,
+                                          'ydirection': ydir,
+                                          'ydegrees': ydeg,
+                                          'yminutes': ymin,
+                                          'yseconds': ysec,
+                                          'fullpath': fullfname}
                     try:
                         arroyos[arroyo_name].append(relfname)
                     except:
                         arroyos[arroyo_name] = [relfname]
-                                                
-                    [yr, mo, day], dd, xdms, ydms = self.getImageMetadata(fullfname)
-                    img_meta[relfname] = {'arroyo': arroyo_name,
-                                          'arroyo#': arroyo_num,
-                                          'dam': dam_name,
-                                          'dam_year': dam_year,
-                                          'img_date': [yr, mo, day],
-                                          'dec_deg': dd,
-                                          'x_dms': xdms,
-                                          'y_dms': ydms }
-                    if dd is None:
-                        self._log('Failed to return decimal degrees for {}'.format(relfname))
-                    else:
-                        self.evaluateExtent(dd)
-                    all_data['images'].append(img_meta) 
+
         all_data['arroyo_count'] = len(arroyos.keys())
-        return all_data    
+        all_data['arroyos'] = arroyos
+        all_data['images'] = img_meta
+        all_data['img_count'] = img_count
+        all_data['img_count_geo'] = img_count_geo
+        return all_data
     
+    # ...............................................
+    def write_csv_data(self, out_csv_fname, all_data, delimiter=DELIMITER):
+        """        
+        """
+        with open(out_csv_fname, 'wb') as csvfile:
+            csvwriter = csv.writer(csvfile, delimiter=delimiter)
+            csvwriter.writerow(self.CSV_FIELDS)
+            for relfname, imgdata in all_data[self.IMAGES_KEY].iteritems():
+                rec = []
+                for fld in self.CSV_FIELDS:
+                    try:
+                        rec.append(imgdata[fld])
+                    except:
+                        rec.append('')
+                self._log('Writing dam {} ...'.format(relfname))
+                csvwriter.writerow(rec)
+
+
     # ...............................................
     def resize_images(self, resize_path, image_data, resize_width=500):
         """
@@ -603,6 +649,33 @@ def readyFilename(fullfilename, overwrite=True):
             return True
         else:
             raise Exception('Failed to create directories {}'.format(pth))
+        
+# .............................................................................
+def getCSVReader(datafile, delimiter):
+    try:
+        f = open(datafile, 'r') 
+        reader = csv.reader(f, delimiter=delimiter)        
+    except Exception, e:
+        raise Exception('Failed to read or open {}, ({})'
+                        .format(datafile, str(e)))
+    return reader, f
+
+# .............................................................................
+def getCSVWriter(datafile, delimiter, doAppend=True):
+    csv.field_size_limit(sys.maxsize)
+    if doAppend:
+        mode = 'ab'
+    else:
+        mode = 'wb'
+       
+    try:
+        f = open(datafile, mode) 
+        writer = csv.writer(f, delimiter=delimiter)
+    except Exception, e:
+        raise Exception('Failed to read or open {}, ({})'
+                        .format(datafile, str(e)))
+    return writer, f
+
 
 # ...............................................
 def reduceImageSize(infname, outfname, width, sample_method):
@@ -632,22 +705,17 @@ if __name__ == '__main__':
     log = None
     image_path = os.path.join(BASE_PATH, IN_DIR)
     resize_path= os.path.join(BASE_PATH, THUMB_DIR)
+    out_csv_fname = os.path.join(BASE_PATH, OUT_DIR, OUTNAME+'.csv')
     bbox = (minX, minY, maxX, maxY)
-
-    sep = '_'
     
     pm = PicMapper(image_path, buffer_distance=dam_buffer, 
                    bbox=bbox, logger=log)
-    image_data = pm.gather_image_data()
-    
-
-    shpfname = os.path.join(BASE_PATH, OUT_DIR, OUTNAME + '.shp')
-    kmlfname = os.path.join(BASE_PATH, OUT_DIR, OUTNAME + '.kml')
     
     # Read data
-    image_data = pm.gather_image_data()
+    img_data = pm.read_image_data()
     print('Given: {} {} {} {}'.format(pm.bbox[0], pm.bbox[1], pm.bbox[2], pm.bbox[3]))
-    print('Computed: '.format(pm._minX, pm._minY, pm._maxX, pm._maxY))
+    print('Computed: '.format(pm.extent))
+    pm.write_csv_data(out_csv_fname, img_data)
 
     # Reduce image sizes
     t = time.localtime()

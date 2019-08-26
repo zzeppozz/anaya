@@ -1,11 +1,38 @@
+#!/Library/Frameworks/Python.framework/Versions/2.7/bin/python
+
+# Script dependency location
+p2_gdal_loc = '/Library/Frameworks/GDAL.framework/Versions/2.1/Python/2.7/site-packages'
+import sys
+sys.path.insert(0, p2_gdal_loc)
+
+import csv
 import exifread
 import os
+from osgeo import ogr, osr
 import logging
+from logging.handlers import RotatingFileHandler
+# Using Pillow 6.1.0 installed with "pip2.7 install Pillow"
 from PIL import Image
+import simplekml as skml
 import time
 
+GEOM_WKT = "geomwkt"
+LONG_FLD = 'longitude'
+LAT_FLD = 'latitude'
+
+DELIMITER = '\t'
+
+# LOG_FORMAT = ' '.join(["%(asctime)s",
+#                    "%(threadName)s.%(module)s.%(funcName)s",
+#                    "line",
+#                    "%(lineno)d",
+#                    "%(levelname)-8s",
+#                    "%(message)s"])
+# 
+# LOG_DATE_FORMAT = '%d %b %Y %H:%M'
+
 # .............................................................................
-class IMG_META:
+class IMGMETA:
     X_KEY = 'GPS GPSLongitude'
     X_DIR_KEY = 'GPS GPSLongitudeRef'
     Y_KEY = 'GPS GPSLatitude'
@@ -16,36 +43,22 @@ class IMG_META:
 class PicMapper(object):
 # .............................................................................
     """
-    Class to write a KML file from a directory of georeferenced images
+    Class to write a shapefile from GBIF CSV output or BISON JSON output 
     export p3=/Library/Frameworks/Python.framework/Versions/3.7/bin/python3.7
     Yelp help: https://engineeringblog.yelp.com/2017/06/making-photos-smaller.html
-    """    
-    GEOMETRY_WKT = "geomwkt"
-    LONGITUDE_FIELDNAME = 'longitude'
-    LATITUDE_FIELDNAME = 'latitude'
-    
-    FIELDS = ['arroyo', 
-              'fullpath', 
-              'relpath', 
-              'basename', 
-              'imgdate', 
-              GEOMETRY_WKT, 
-              LONGITUDE_FIELDNAME,
-              LATITUDE_FIELDNAME,
-              'xdirection', 
-              'xdegrees', 
-              'xminutes', 
-              'xseconds', 
-              'ydirection', 
-              'ydegrees', 
-              'yminutes',
-              'yseconds']
+    """
+    IMAGES_KEY = 'images'
+    CSV_FIELDS = ('arroyo', 'arroyo_num', 'dam', 'dam_num', 'dam_date', 
+                  'img_date', LONG_FLD, LAT_FLD, GEOM_WKT, 
+                  'xdirection', 'xdegrees', 'xminutes', 'xseconds',
+                  'ydirection', 'ydegrees', 'yminutes', 'yseconds',
+                  'fullpath')
 
 # ............................................................................
 # Constructor
 # .............................................................................
-    def __init__(self, image_path, buffer_distance=.002, bbox=(-180, -90, 180, 90), 
-                 logger=None):
+    def __init__(self, image_path, buffer_distance=.002, 
+                 bbox=(-180, -90, 180, 90), logger=None):
         """
         @param image_path: Root path for image files to be processed
         @param image_buffer: Buffer in which images are considered to be the 
@@ -66,7 +79,7 @@ class PicMapper(object):
     # ...............................................
     def _getDate(self, tags):
         # Get date
-        dtstr = tags[IMG_META.DATE_KEY].values
+        dtstr = tags[IMGMETA.DATE_KEY].values
         [yr, mo, day] = [int(x) for x in dtstr.split(':')]
         return  yr, mo, day
     
@@ -78,12 +91,12 @@ class PicMapper(object):
             print(msg)
             
     # ...............................................
-    def _getLocationDim(self, tags, locKey, dirKey, negativeIndicator):
+    def _parse_coordinate(self, tags, locKey, dirKey, negativeIndicator):
         isNegative = False
         # Get longitude or latitude
         degObj, minObj, secObj = tags[locKey].values
-        dir = tags[dirKey].printable
-        if dir == negativeIndicator:
+        direction = tags[dirKey].printable
+        if direction == negativeIndicator:
             isNegative = True
         # Convert to float
         degrees = degObj.num / float(degObj.den) 
@@ -93,14 +106,15 @@ class PicMapper(object):
         dd = (seconds/3600) + (minutes/60) + degrees
         if isNegative:
             dd = -1 * dd
-        return dd, degrees, minutes, seconds, dir
+        return dd, degrees, minutes, seconds, direction
     
     # ...............................................
     def _getDD(self, tags):
-        xdd, xdeg, xmin, xsec, xdir = self._getLocationDim(
-            tags, IMG_META.X_KEY, IMG_META.X_DIR_KEY, 'W')
-        ydd, ydeg, ymin, ysec, ydir = self._getLocationDim(
-            tags, IMG_META.Y_KEY, IMG_META.Y_DIR_KEY, 'S')
+        xdd, xdeg, xmin, xsec, xdir = self._parse_coordinate(
+            tags, IMGMETA.X_KEY, IMGMETA.X_DIR_KEY, 'W')
+        ydd, ydeg, ymin, ysec, ydir = self._parse_coordinate(
+            tags, IMGMETA.Y_KEY, IMGMETA.Y_DIR_KEY, 'S')
+        
         # Convert to desired format
         dd = (xdd, ydd)
         xdms = (xdeg, xmin, xsec, xdir)
@@ -109,7 +123,7 @@ class PicMapper(object):
         return dd, xdms, ydms
         
     # ...............................................
-    def _open_kml_file(self, fname, satellite_fname):
+    def _open_kml_file(self, fname):
         """
         @todo: gather bounds from images
         """
@@ -125,8 +139,7 @@ class PicMapper(object):
         f.write('   <GroundOverlay>\n')
         f.write('      <name>Satellite overlay on terrain</name>\n')
         f.write('      <description>Local imagery</description>\n')
-        if satellite_fname is not None:
-            f.write('      <Icon><href>{}</href></Icon>\n'.format(satellite_fname))
+        f.write('      <Icon><href>{}</href></Icon>\n'.format(SAT_FNAME))
         f.write('      <LatLonBox>\n')
         f.write('         <north>{}</north>\n'.format(maxY))
         f.write('         <south>{}</south>\n'.format(minY))
@@ -142,32 +155,95 @@ class PicMapper(object):
         kmlf.write('</Folder>\n')
         kmlf.write('</Document></kml>\n')
         kmlf.close()
-
+    
+    # ...............................................
+    def _create_shplayer(self, shp_fname):
+        ogr.RegisterAll()
+        drv = ogr.GetDriverByName('ESRI Shapefile')
+        tSRS = osr.SpatialReference()
+        tSRS.ImportFromEPSG(4326)
+        try:
+            # Create the file object
+            ds = drv.CreateDataSource(shp_fname)
+            if ds is None:
+                raise Exception('Dataset creation failed for {}'.format(shp_fname))
+            # Create a layer
+            lyr = ds.CreateLayer('anayaSprings', geom_type=ogr.wkbPoint, srs=tSRS)
+            if lyr is None:
+                raise Exception('Layer creation failed for {}'.format(shp_fname))
+        except Exception as e:
+            raise Exception('Failed creating dataset or layer for {} ({})'
+                            .format(shp_fname, str(e)))
+        # Create attributes
+        for fldname in self.CSV_FIELDS:
+            fldtype = ogr.OFTString
+            if (fldname in (LONG_FLD, LAT_FLD) or 
+                fldname[1:] in ('degrees', 'minutes', 'seconds')):
+                fldtype = ogr.OFTReal
+                
+            fldDefn = ogr.FieldDefn(fldname, fldtype)
+            if lyr.CreateField(fldDefn) != 0:
+                raise Exception('CreateField failed for %s' % (fldname))
+            
+        return ds, lyr
             
     # ...............................................
-    def _createFeatureInKML(self, kmlf, fname, rel_fname, pointdata):
-        """
-        <img style="max-width:500px;" 
-         src="file:///Users/astewart/Home/2017AnayaPics/18-LL-Spring/SpringL1-20150125_0009.JPG">
-         SpringL1-20150125_0009 in 18-LL-Spring on 2015-1-25
-        """
-        ([yr, mo, day], (xdd, ydd), xvals, yvals) = pointdata
-        imgname, _ = os.path.splitext(os.path.basename(fname))
-        parts = rel_fname.split('\\')
-        lastArroyo = parts[0]
-        dt = '{}-{}-{}'.format(yr, mo, day)
-    
-        kmlf.write('  <Placemark>\n')
-        kmlf.write('    <name>{}</name>\n'.format(imgname))
-        kmlf.write('    <description>{} in {} on {}</description>\n'.format(imgname, lastArroyo, dt))
-        kmlf.write('    <img style="max-width:500px;" src="file://{}"></img>\n'.format(fname))
-        kmlf.write('    <Point><coordinates>{},{}</coordinates></Point>\n'.format(xdd, ydd))
-        kmlf.write('  </Placemark>\n')
+    def _createFeatureInLayer(self, lyr, fname, pointdata, start_idx):
+        ([yr, mo, day], (xdd, ydd), 
+         (xdeg, xmin, xsec, xdir), (ydeg, ymin, ysec, ydir)) = pointdata
+        pth, basefname = os.path.split(fname)
+        relative_path = fname[start_idx:]    
+        tmp, lastArroyo = os.path.split(pth)
+        feat = ogr.Feature( lyr.GetLayerDefn() )
+        try:
+            feat.SetField('arroyo', lastArroyo)
+            feat.SetField('fullpath', fname)
+            feat.SetField('relpath', relative_path)
+            feat.SetField('basename', basefname)
+            feat.SetField('imgdate', '{}-{}-{}'.format(yr, mo, day))
+            feat.SetField('xdegrees', xdeg)
+            feat.SetField('xminutes', xmin)
+            feat.SetField('xseconds', xsec)
+            feat.SetField('xdirection', xdir)
+            feat.SetField('ydegrees', ydeg)
+            feat.SetField('yminutes', ymin)
+            feat.SetField('yseconds', ysec)
+            feat.SetField('ydirection', ydir)
+            feat.SetField(self.LONGITUDE_FIELDNAME, xdd)
+            feat.SetField(self.LATITUDE_FIELDNAME, ydd)
+            if xdd is not None and ydd is not None:
+                wkt = 'Point (%.7f  %.7f)' % (xdd, ydd)
+                feat.SetField(self.GEOMETRY_WKT, wkt)
+                geom = ogr.CreateGeometryFromWkt(wkt)
+                feat.SetGeometryDirectly(geom)
+            else:
+                self._log('Failed to set geom with x = {} and y = {}'
+                          .format(xdd, ydd))
+        except Exception as e:
+            self._log('Failed to fillOGRFeature, e = {}'.format(e))
+        else:
+            # Create new feature, setting FID, in this layer
+            lyr.CreateFeature(feat)
+            feat.Destroy()
+            
+        
+#     # ...............................................
+#     def _create_kml_point(self, kml, dam):
+#         """
+#         """
+#         pnt = kml.newpoint(name=dam['dam'])
+#         pnt.lookat = skml.LookAt(gxaltitudemode=skml.GxAltitudeMode.relativetoseafloor,
+#                               latitude=dam[LAT_FLD], longitude=dam[LONG_FLD],
+#                               range=3000, heading=56, tilt=78)
+#         pnt.snippet.content = 'Arroyo {} - {}, {}'.format(dam['arroyo_num'], 
+#                                     dam['arroyo'], dam['img_date'][0])
+#         pnt.snippet.maxlines = 1
+#         print kml.kml()
         
     # ...............................................
     def _testBufferAddLocation(self, all_coords, currfname, currpointdata):
         (_, (currx, curry), _, _) = currpointdata
-        for fname, (x,y) in all_coords.items():
+        for fname, (x,y) in all_coords.iteritems():
             dx = abs(abs(x) - abs(currx))
             dy = abs(abs(y) - abs(curry))
             if dx < self.buffer_distance or dy < self.buffer_distance:
@@ -178,43 +254,31 @@ class PicMapper(object):
         return all_coords
             
     # ...............................................
-    def createKML(self, kmlfname, imageData, resize_width=500, resize_path=None, satellite_fname=None):
-        """
-        {arroyo_name: {num: <arroyo_num>, fullname: ([yr, mo, day], dd, xdms, ydms),
-                                          ...
-                                          fullname: ([yr, mo, day], dd, xdms, ydms)}
-        }
-        """
-        kmlf = self._open_kml_file(kmlfname, satellite_fname)
-            
+    def write_shapefile(self, out_image_path, shp_fname, all_data, start_idx):
+
+        dataset, lyr = self._create_layer(self.CSV_FIELDS, shp_fname)
         all_coords = {}
-        for arroyo_name, arroyo_data in imageData.items():
-            imageinfo = []
-            for key, val in arroyo_data.items():
-                if key == 'num':
-                    arroyo_num = val
-                else:
-                    imageinfo.append((key, val))
-            for fname, pointdata in imageinfo:
-                # Resize image?
-                if resize_path is not None:
-                    if not resize_path.endswith('/'):
-                        resize_path = resize_path + '/'
-                    # includes trailing /
-                    rel_fname = fname[len(self.image_path):]
-                    newrel_fname = rel_fname.replace(')', '-')
-                    resize_fname = resize_path + newrel_fname
-                    reduceImageSize(fname, resize_fname, resize_width, Image.ANTIALIAS)
-                    fname = resize_fname
-                else:
-                    rel_fname = fname[len(self.image_path):]
-                self._createFeatureInKML(kmlf, fname, rel_fname, pointdata)
+        for infname, pointdata in all_data.iteritems():
+            # Reduce image
+            relativePath = infname[start_idx:]
+            outfname = os.path.join(out_image_path, relativePath)
+            outfname = out_image_path + relativePath
+            self._reduceImageSize(infname, outfname)
             
-        self._close_kml_file(kmlf)
+            print('Writing feature {} to existing {} locations'.format(
+                outfname, len(all_coords)))
+            all_coords = self._testBufferAddLocation(all_coords, outfname, pointdata)
+            self._createFeatureInLayer(lyr, outfname, pointdata, start_idx)
+            
+        dataset.Destroy()
+        print('Closed/wrote dataset %s' % shp_fname)
+        success = True
+        self._log('Success {} writing shapefile {}'.format(success, 
+                                                           shp_fname))
     
     
     # ...............................................
-    def getImageMetadata(self, fullname):
+    def get_image_metadata(self, fullname):
         dd = xdms = ydms = yr = mo = day = None
         try:
             # Open image file for reading (binary mode)
@@ -236,7 +300,7 @@ class PicMapper(object):
         return [yr, mo, day], dd, xdms, ydms
     
     # ...............................................
-    def evaluateExtent(self, dd):
+    def evaluate_extent(self, dd):
         if self._minX is None:
             self._minX = dd[0]
             self._maxX = dd[0]
@@ -254,57 +318,187 @@ class PicMapper(object):
                 self._maxY = dd[1]
     
     # ...............................................
-    def parse_filename(self, root, fname):
-        name = ''
-        dt = ''
-        count = ''
-        oncount = False
-        _, arroyo = os.path.split(root)
-        arroyo_num, arroyo_name = arroyo.split(')')
-        for ch in fname:
-            try:
-                int(ch)
-                if oncount:
-                    count += ch
-                else:
-                    dt += ch
-            except:
-                if ch == '_':
-                    oncount = True
-                else:
-                    name += ch
-        year = int(dt[:4])
-        picnum = int(count)
-        return arroyo_num, arroyo_name, name, year, picnum    
+    @property
+    def extent(self):
+        return (self._minX, self._minY, self._maxX, self._maxY)
         
     # ...............................................
-    def readAllImages(self):
+    def parse_relfname(self, relfname):
+        parts = relfname.split(os.sep)
+        arroyo = parts[0]
+        arroyo_num, arroyo_name = arroyo.split(')')
+        basename, ext = os.path.splitext(parts[-1])
+        
+        if len(parts) != 2:
+            self._log('Relative path parts {}'.format(parts))
+            
+        ntmp, ctmp = basename.split('_')
+        picnum = int(ctmp)
+        for i in range(len(ntmp)):
+            try:
+                int(ntmp[i])
+                break
+            except:
+                pass
+        name = ntmp[:i]
+        dtmp = ntmp[i:]
+        yr = dtmp[:4]
+        mo = dtmp[4:6]
+        dy = dtmp[6:]
+        
+        return arroyo_num, arroyo_name, name, [yr, mo, dy], picnum       
+    
+    # ...............................................
+    def read_image_data(self):
         """
-        {arroyo_name: {num: <arroyo_num>, fullname: ([yr, mo, day], dd, xdms, ydms),
-                                          ...
-                                          fullname: ([yr, mo, day], dd, xdms, ydms)}
-        }
         """
-        image_data = {}
+        all_data = {'BASE_PATH': BASE_PATH,
+                    'arroyos': None,
+                    'img_count': None,
+                    'img_count_geo': None,
+                    'dam_count': None,
+                    'dam_count_geo': None,
+                    self.IMAGES_KEY: []}
+        arroyos = {}
+        IMGMETA = {}
+        img_count = 0
+        img_count_geo = 0
         for root, dirs, files in os.walk(self.image_path):
             for fname in files:
                 if fname.endswith('jpg') or fname.endswith('JPG'): 
-                    orig_fname = os.path.join(root, fname)
+                    img_count += 1
+                    fullfname = os.path.join(root, fname)
+                    relfname = fullfname[len(self.image_path)+1:]
+                    xdeg = xmin = xsec = xdir = ydeg = ymin = ysec = ydir = wkt = ''
+    
+                    arroyo_num, arroyo_name, dam_name, dam_date, picnum = \
+                        self.parse_relfname(relfname)
+                    [yr, mo, day], (xdd, ydd), xdms, ydms = self.get_image_metadata(fullfname)
                     
-                    arroyo_num, arroyo_name, name, year, picnum = self.parse_filename(root, fname)
+                    if xdms is not None:
+                        (xdeg, xmin, xsec, xdir) = xdms
+                    if ydms is not None:
+                        (ydeg, ymin, ysec, ydir) = ydms
+                    if xdd is not None and ydd is not None:
+                        wkt = 'Point ({:.7f}  {:.7f})'.format(xdd, ydd)
+                        img_count_geo += 1
+                        self.evaluate_extent((xdd, ydd))
+                    else:
+                        self._log('Failed to return decimal degrees for {}'.format(relfname))
+                    
+                    IMGMETA[relfname] = {'arroyo': arroyo_name, 
+                                          'arroyo_num': arroyo_num,
+                                          'dam': dam_name,
+                                          'dam_num': picnum,
+                                          'dam_date': dam_date,
+                                          'img_date': [yr, mo, day],
+                                          LONG_FLD: xdd,
+                                          LAT_FLD: ydd,
+                                          GEOM_WKT: wkt,
+                                          'xdirection': xdir,
+                                          'xdegrees': xdeg,
+                                          'xminutes': xmin, 
+                                          'xseconds': xsec,
+                                          'ydirection': ydir,
+                                          'ydegrees': ydeg,
+                                          'yminutes': ymin,
+                                          'yseconds': ysec,
+                                          'fullpath': fullfname}
                     try:
-                        image_data[arroyo_name]['num'] = arroyo_num
-                    except KeyError:
-                        image_data[arroyo_name] = {'num': arroyo_num}
+                        arroyos[arroyo_name].append(relfname)
+                    except:
+                        arroyos[arroyo_name] = [relfname]
+
+        all_data['arroyo_count'] = len(arroyos.keys())
+        all_data['arroyos'] = arroyos
+        all_data['images'] = IMGMETA
+        all_data['img_count'] = img_count
+        all_data['img_count_geo'] = img_count_geo
+        return all_data
+    
+    # ...............................................
+    def write_csv_data(self, out_csv_fname, all_data, thumb_data, delimiter=DELIMITER):
+        """        
+        """
+        with open(out_csv_fname, 'wb') as csvfile:
+            csvwriter = csv.writer(csvfile, delimiter=delimiter)
+            header = [fld for fld in self.CSV_FIELDS]
+            header.append('thumbnail')
+            
+            csvwriter.writerow(header)
+            for relfname, imgdata in all_data[self.IMAGES_KEY].iteritems():
+                try:
+                    thumb_fname, width, height = thumb_data[relfname]
+                except:
+                    thumb_fname = 'x'
+                rec = []
+                for fld in self.CSV_FIELDS:
+                    try:
+                        rec.append(imgdata[fld])
+                    except:
+                        rec.append('')
+                rec.append(thumb_fname)
+                csvwriter.writerow(rec)
+
+
+    # ...............................................
+    def write_kml_data(self, out_kml_fname, all_data, thumb_data, filteryear):
+        """
+        """
+        kml = skml.Kml(open=1)
+#         fldr = kml.newfolder(name=filteryear)
+        style = skml.Style()
+        style.labelstyle.color = 'ffff00ff'
+        style.iconstyle.scale = 1.0
+#         style.balloonstyle.text = 'These are trees and this text is blue with a green background.'
+#         style.balloonstyle.bgcolor = skml.Color.lightgreen
+#         style.balloonstyle.textcolor = skml.Color.rgb(0, 0, 255)
+        
+        for relfname, dam in all_data[self.IMAGES_KEY].iteritems():
+            if filteryear is None or dam['img_date'][0] == filteryear:
+                try:
+                    thumb_fname, width, height = thumb_data[relfname]
+                except:
+                    thumb_fname, width, height = ('x', 0, 0)
+                
+#                 info = """
+#                         <![CDATA[
+#                             <table width=100% cellpadding=0 cellspacing=0>
+#                                 <tr>
+#                                     <td><img width=100% src='{}' /></td>
+#                                 </tr>
+#                             </table>]]>
+#                        """.format(thumb_fname)
+                info = 'Arroyo {} - {}, {}'.format(dam['arroyo_num'], 
+                                                   dam['arroyo'], 
+                                                   dam['img_date'][0])
+                info = ('<img src="{}" alt="picture" width="{}" height="{}" align="left" />'
+                        .format(thumb_fname, width, height))
+                pnt = kml.newpoint(name=dam['dam'], 
+                                   coords=[(dam[LONG_FLD], dam[LAT_FLD])])
+                pnt.style = style
+                pnt.description = info
+#                 pnt.style.balloonstyle.text = info
+                pnt.lookat = skml.LookAt(
+                    gxaltitudemode=skml.GxAltitudeMode.relativetoseafloor,
+                    latitude=dam[LAT_FLD], longitude=dam[LONG_FLD],
+                    range=3000, heading=56, tilt=78)
+                pnt.snippet.content = 'Arroyo {} - {}, {}'.format(dam['arroyo_num'], 
+                                            dam['arroyo'], dam['img_date'][0])
+                pnt.snippet.maxlines = 1
+        kml.save(out_kml_fname)
+
+
+    # ...............................................
+    def resize_images(self, resize_path, all_data, width=500, alg=Image.ANTIALIAS, quality=95):
+        thumb_data = {}
+        for relfname, dam in all_data[self.IMAGES_KEY].iteritems():
+            origfname = dam['fullpath']
+            sm_fname = os.path.join(resize_path, relfname)
+            thumbname, w, h = resize_image(origfname, sm_fname, width, alg, quality=quality)
+            thumb_data[relfname] = (thumbname, w, h) 
                         
-                    [yr, mo, day], dd, xdms, ydms = self.getImageMetadata(orig_fname)
-                    if dd is None:
-                        return {}
-                    
-                    self.evaluateExtent(dd)
-                    image_data[arroyo_name][orig_fname] =  ([yr, mo, day], dd, xdms, ydms)
-                        
-        return image_data
+        return thumb_data
 
 # .............................................................................
 def getLogger(outpath):
@@ -315,23 +509,29 @@ def getLogger(outpath):
                        "%(levelname)-8s",
                        "%(message)s"])
     LOG_DATE_FORMAT = '%d %b %Y %H:%M'
-    # get name
+    maxsize = 52000000
+    level = logging.DEBUG
+    
+    # get log filename
     scriptname, _ = os.path.splitext(os.path.basename(__file__))
     secs = time.time()
     timestamp = "{}".format(time.strftime("%Y%m%d-%H%M", time.localtime(secs)))
     logname = '{}.{}'.format(scriptname, timestamp)
     logfname = os.path.join(outpath, logname + '.log')
+    
     # get logger
     log = logging.getLogger(logname)
-    log.setLevel(logging.DEBUG)
-    fileLogHandler = logging.handlers.RotatingFileHandler(logfname, 
-                                            maxBytes=52000000, backupCount=2)
+    log.setLevel(level)
+    
     # add file handler
-    fileLogHandler.setLevel(logging.DEBUG)
+    fileLogHandler = RotatingFileHandler(logfname, maxBytes=maxsize, backupCount=2)
+    fileLogHandler.setLevel(level)
     formatter = logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT)
     fileLogHandler.setFormatter(formatter)
     log.addHandler(fileLogHandler)
+    
     return log
+
 
 # .............................................................................
 def getBbox(bbox_str):
@@ -375,28 +575,63 @@ def readyFilename(fullfilename, overwrite=True):
             return True
         else:
             raise Exception('Failed to create directories {}'.format(pth))
+        
+# .............................................................................
+def getCSVReader(datafile, delimiter):
+    try:
+        f = open(datafile, 'r') 
+        reader = csv.reader(f, delimiter=delimiter)        
+    except Exception, e:
+        raise Exception('Failed to read or open {}, ({})'
+                        .format(datafile, str(e)))
+    return reader, f
+
+# .............................................................................
+def getCSVWriter(datafile, delimiter, doAppend=True):
+    csv.field_size_limit(sys.maxsize)
+    if doAppend:
+        mode = 'ab'
+    else:
+        mode = 'wb'
+       
+    try:
+        f = open(datafile, mode) 
+        writer = csv.writer(f, delimiter=delimiter)
+    except Exception, e:
+        raise Exception('Failed to read or open {}, ({})'
+                        .format(datafile, str(e)))
+    return writer, f
+
 
 # ...............................................
-def reduceImageSize(infname, outfname, width, sample_method):
+def resize_image(infname, outfname, width, sample_method, quality):
     readyFilename(outfname, overwrite=True)
     img = Image.open(infname)
+    icc_profile = img.info.get("icc_profile")
+    
     wpercent = (width / float(img.size[0]))
     height = int((float(img.size[1]) * float(wpercent)))
     size = (width, height)
+    
     img = img.resize(size, sample_method)
-    img.save(outfname)
+    img.save(outfname, 'JPEG', quality=quality, icc_profile=icc_profile)
+    
     print('Rewrote image {} to {}'.format(infname, outfname))
+    return outfname, width, height
 
 
 # .............................................................................
 # .............................................................................
 # ...............................................
-if __name__ == '__main__':
-    INPATH = '/Users/astewart/Home/anaya_pics/'
-    SMALLPATH = '/Users/astewart/Home/anaya_pics_sm/'
-    OUTPATH = '/Users/astewart/Home/AnayaGE'
+if __name__ == '__main__':    
+    BASE_PATH='/Users/astewart/Home/Anaya'
+    THUMB_DIR = 'anaya_thumbs'
+    OUT_DIR = 'AnayaGE'
     OUTNAME = 'dam_anaya'
-    SAT_IMAGE_FNAME = '/Users/astewart/Home/AnayaGE/satellite/op140814.tif'
+    SAT_FNAME = 'satellite/op140814.tif'
+    
+    filteryear = None
+    IN_DIR = 'anaya_pics'
     
     maxY = 35.45045
     minY = 35.43479
@@ -404,141 +639,128 @@ if __name__ == '__main__':
     minX = -106.07259
     
     dam_buffer = .0002
-
-    import argparse
-    parser = argparse.ArgumentParser(
-             description=(""""Read a directory full of image files, then for 
-             each image, gather metadata, optionally rewrite the image as a
-             smaller file, and write as a feature in a KML file, Shapefiles, or 
-             both."""))
-    parser.add_argument('image_path', default=None,
-             help=('Root path for image files to be processed.'))
-    parser.add_argument('--buffer', type=float, default=dam_buffer,
-             help=("""Buffer distance in decimal degrees, in which images can 
-             be considered to be the same location"""))
-    parser.add_argument('--bbox', type=str, 
-                        default="({}, {}, {}, {})".format(minX, minY, maxX, maxY),
-             help=("""Tuple of the bounds of the output data, in 
-                     (minX, minY, maxX, maxY) format.  Outside these bounds, 
-                     images will be discarded"""))
-    args = parser.parse_args()
+    thumb_width = 500
     
-    image_path = args.image_path
-    buffer_distance = args.buffer
-    bbox_str = args.bbox
-    kml_flag = args.do_kml
-
-    sep = '_'
-    bbox = getBbox(bbox_str)
+#     log = getLogger(os.path.join(BASE_PATH, OUT_DIR))
+    log = None
+    image_path = os.path.join(BASE_PATH, IN_DIR)
+    thumb_path= os.path.join(BASE_PATH, OUT_DIR, THUMB_DIR)
+    out_csv_fname = os.path.join(BASE_PATH, OUT_DIR, OUTNAME+'.csv')
+    out_kml_fname = os.path.join(BASE_PATH, OUT_DIR, OUTNAME+'.kml')
+    bbox = (minX, minY, maxX, maxY)
     
-    pm = PicMapper(image_path, buffer_distance=buffer_distance, 
-                   bbox=(minX, minY, maxX, maxY))
-    
-    kmlfname = os.path.join(OUTPATH, OUTNAME + '.kml')
+    pm = PicMapper(image_path, buffer_distance=dam_buffer, 
+                   bbox=bbox, logger=log)
     
     # Read data
-    imageData = pm.readAllImages()
-    print('Given: {} {} {} {}'.format(pm.bbox[0], pm.bbox[1], pm.bbox[2], pm.bbox[3]))
-    print('Computed: '.format(pm._minX, pm._minY, pm._maxX, pm._maxY))
+    dam_data = pm.read_image_data()
+    print('Given: {}'.format(pm.bbox))
+    print('Computed: {}'.format(pm.extent))
+    thumb_data = pm.resize_images(thumb_path, dam_data, width=thumb_width, alg=Image.ANTIALIAS, quality=95)
+    pm.write_csv_data(out_csv_fname, dam_data, thumb_data)
+    pm.write_kml_data(out_kml_fname, dam_data, thumb_data, filteryear)
+    
 
-    # Write data
-    pm.createKML(kmlfname, imageData, resize_width=500, resize_path=SMALLPATH, 
-                 satellite_fname=SAT_IMAGE_FNAME)
-     
+    # Reduce image sizes
+    t = time.localtime()
+    stamp = '{}_{}_{}-{}_{}'.format(t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min)
 
 
 '''
-from dam_map import *
+p2_gdal_loc = '/Library/Frameworks/GDAL.framework/Versions/2.1/Python/2.7/site-packages'
+p2_pil_loc = '/Library/Python/2.7/site-packages/'
 
+import sys
+sys.path.insert(0, p2_gdal_loc)
+sys.path.insert(0, p2_pil_loc)
+
+import csv
 import exifread
 import os
+from osgeo import ogr, osr
 import logging
+from logging.handlers import RotatingFileHandler
 from PIL import Image
+import simplekml as skml
 import time
+from dam_map import *
 
-INPATH = '/Users/astewart/Home/anaya_pics/'
-SMALLPATH = '/Users/astewart/Home/anaya_pics_sm/'
-OUTPATH = '/Users/astewart/Home/AnayaGE'
+GEOM_WKT = "geomwkt"
+LONG_FLD = 'longitude'
+LAT_FLD = 'latitude'
+
+DELIMITER = '\t'
+BASE_PATH='/Users/astewart/Home/Anaya'
+IN_DIR = 'anaya_pics'
+THUMB_DIR = 'anaya_thumbs'
+OUT_DIR = 'AnayaGE'
 OUTNAME = 'dam_anaya'
-SAT_IMAGE_FNAME = '/Users/astewart/Home/AnayaGE/satellite/op140814.tif'
+SAT_FNAME = 'satellite/op140814.tif'
+SAT_IMAGE_FNAME = os.path.join(BASE_PATH, SAT_FNAME)
 
 maxY = 35.45045
 minY = 35.43479
 maxX = -106.05353
 minX = -106.07259
 
-image_path = INPATH
+dam_buffer = .0002
+resize_width = 500
 
-pm = PicMapper(image_path, 
-               bbox=(minX, minY, maxX, maxY))
+log = None
+image_path = os.path.join(BASE_PATH, IN_DIR)
+resize_path= os.path.join(BASE_PATH, OUT_DIR, THUMB_DIR)
+out_csv_fname = os.path.join(BASE_PATH, OUT_DIR, OUTNAME+'.csv')
+out_kml_fname = os.path.join(BASE_PATH, OUT_DIR, OUTNAME+'.kml')
+bbox = (minX, minY, maxX, maxY)
 
-kmlfname = os.path.join(OUTPATH, OUTNAME + '.kml')
+################################################
+infname = '/Users/astewart/Home/Anaya/anaya_pics/33)Conglomerate/conglomerate20151008_001.JPG'
+outfname = '/Users/astewart/Home/Anaya/AnayaGE/anaya_thumbs/33)Conglomerate/conglomerate20151008_001.JPG'
+width = 500
+sample_method = Image.ANTIALIAS
+
+# def resize_image(infname, outfname, width, sample_method):
+img = Image.open(infname)
+icc_profile = img.info.get("icc_profile")
+img = img.resize(size, sample_method)
+readyFilename(outfname, overwrite=True)
+img.save(outfname, icc_profile=icc_profile, quality=95)
+
+wpercent = (width / float(img.size[0]))
+height = int((float(img.size[1]) * float(wpercent)))
+size = (width, height)
+
+# sample_method = Image.LANCZOS
+# sample_method = Image.BILINEAR
+# sample_method = Image.BICUBIC
+
+
+img = img.resize(size, sample_method)
+readyFilename(outfname, overwrite=True)
+img.save(outfname, icc_profile=icc_profile, quality=95)
+
+img2 = Image.open(outfname)
+icc_profile2 = img.info.get("icc_profile")
+if icc_profile == icc_profile2:
+    print 'color profile is same'
+
+print('Rewrote image {} to {}'.format(infname, outfname))
+################################################
+
+pm = PicMapper(image_path, buffer_distance=dam_buffer, 
+               bbox=bbox, logger=log)
 
 # Read data
-imageData = pm.readAllImages()
-print('Given: {} {} {} {}'.format(pm.bbox[0], pm.bbox[1], pm.bbox[2], pm.bbox[3]))
-print('Computed: '.format(pm._minX, pm._minY, pm._maxX, pm._maxY))
+dam_data = pm.read_image_data()
+print('Given: {}'.format(pm.bbox))
+print('Computed: {}'.format(pm.extent))
+thumb_files = pm.resize_images(resize_path, dam_data, resize_width=500)
+pm.write_csv_data(out_csv_fname, dam_data)
+pm.write_kml_data(out_kml_fname, dam_data)
 
+# Reduce image sizes
+t = time.localtime()
+stamp = '{}_{}_{}-{}_{}'.format(t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min)
 
-# Write data
-pm.createKML(kmlfname, imageData, resize_width=500, resize_path=SMALLPATH,
-             satellite_fname=SAT_IMAGE_FNAME)
-
-#SCHEMA#
-<Schema name="anaya_springs" id="anaya_springs">
-          <SimpleField name="arroyo" type="string"></SimpleField>
-          <SimpleField name="fullpath" type="string"></SimpleField>
-          <SimpleField name="relpath" type="string"></SimpleField>
-          <SimpleField name="basename" type="string"></SimpleField>
-          <SimpleField name="geomwkt" type="string"></SimpleField>
-          <SimpleField name="longitude" type="float"></SimpleField>
-          <SimpleField name="latitude" type="float"></SimpleField>
-          <SimpleField name="xdirection" type="string"></SimpleField>
-          <SimpleField name="xdegrees" type="float"></SimpleField>
-          <SimpleField name="xminutes" type="float"></SimpleField>
-          <SimpleField name="xseconds" type="float"></SimpleField>
-          <SimpleField name="ydirection" type="string"></SimpleField>
-          <SimpleField name="ydegrees" type="float"></SimpleField>
-          <SimpleField name="yminutes" type="float"></SimpleField>
-          <SimpleField name="yseconds" type="float"></SimpleField>
-</Schema>
-
-#FOLDERNAME#
-<name>anaya_springs</name>
-
-#PLACEMARKS#
-  <Placemark>
-    <ExtendedData><SchemaData schemaUrl="#anaya_springs">
-        <SimpleData name="arroyo">1 RR-Bill's toptobottom</SimpleData>
-        <SimpleData name="fullpath">/Users/astewart/Home/AnneBill/AnayaSprings/1 RR-Bill's toptobottom/201411_anaya20141103_0020.JPG</SimpleData>
-        <SimpleData name="relpath">AnayaSprings/1 RR-Bill's toptobottom/201411_anaya20141103_0020.JPG</SimpleData>
-        <SimpleData name="basename">201411_anaya20141103_0020.JPG</SimpleData>
-        <SimpleData name="geomwkt">Point (-106.0620556  35.4359889)</SimpleData>
-        <SimpleData name="longitude">-106.062055555555560</SimpleData>
-        <SimpleData name="latitude">35.435988888888886</SimpleData>
-        <SimpleData name="xdirection">W</SimpleData>
-        <SimpleData name="xdegrees">106.000000000000000</SimpleData>
-        <SimpleData name="xminutes">3.000000000000000</SimpleData>
-        <SimpleData name="xseconds">43.399999999999999</SimpleData>
-        <SimpleData name="ydirection">N</SimpleData>
-        <SimpleData name="ydegrees">35.000000000000000</SimpleData>
-        <SimpleData name="yminutes">26.000000000000000</SimpleData>
-        <SimpleData name="yseconds">9.560000000000000</SimpleData>
-    </SchemaData></ExtendedData>
-        <Point><coordinates>-106.0620556,35.4359889</coordinates></Point>
-  </Placemark>
-
-<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
-<Placemark>
-    <name>Grey-Bottom20151201_0002.JPG</name>
-    <description>Grey-Bottom20151201_0002 in 13-LL-GreyBottom on 2015-12-1</description>
-    <gx:balloonVisibility>1</gx:balloonVisibility>
-    <Point>
-        <coordinates>-106.067033333,35.4413833333,0</coordinates>
-    </Point>
-    <img style="max-width:500px;" src="file:///Users/astewart/Home/2017AnayaPics/13-LL-GreyBottom/Grey-Bottom20151201_0002.JPG"></img>
-</Placemark>
-</kml>
 
 '''

@@ -1,0 +1,8 @@
+# build directory
+FOSSILS/
+RPMS/x86_64
+
+# ignore python files
+python.mk
+*.pyc
+

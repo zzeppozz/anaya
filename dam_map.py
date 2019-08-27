@@ -440,62 +440,96 @@ class PicMapper(object):
                 rec.append(thumb_fname)
                 csvwriter.writerow(rec)
 
+    # ...............................................
+    def _get_img_info(self, tfname, twidth, theight):
+#         info = """
+#                 <![CDATA[
+#                     <table width=100% cellpadding=0 cellspacing=0>
+#                         <tr>
+#                             <td><img width=100% src='{}' /></td>
+#                         </tr>
+#                     </table>]]>
+#                """.format(tfname)
+        info = ('<img src="{}" alt="picture" width="{}" height="{}" align="left" />'
+                .format(tfname, twidth, theight))
+        return info
 
     # ...............................................
-    def write_kml_data(self, out_kml_fname, all_data, thumb_data, filteryear):
+    def _get_dam_info(self, dam):
+        info = 'Arroyo {} - {}, {}'.format(dam['arroyo_num'], 
+                                           dam['arroyo'], 
+                                           dam['img_date'][0])
+        return info
+
+    # ...............................................
+    def _get_dam_style(self):
         """
         """
-        kml = skml.Kml(open=1)
-#         fldr = kml.newfolder(name=filteryear)
         style = skml.Style()
         style.labelstyle.color = 'ffff00ff'
         style.iconstyle.scale = 1.0
-#         style.balloonstyle.text = 'These are trees and this text is blue with a green background.'
-#         style.balloonstyle.bgcolor = skml.Color.lightgreen
-#         style.balloonstyle.textcolor = skml.Color.rgb(0, 0, 255)
+        style.balloonstyle.bgcolor = skml.Color.bisque
+        style.balloonstyle.textcolor = skml.Color.rgb(255, 255, 255)
+        return style
+
+    # ...............................................
+    def _get_lookat(self, dam):
+        """
+        """
+        la = skml.LookAt(gxaltitudemode=skml.GxAltitudeMode.relativetoseafloor,
+                    latitude=dam[LAT_FLD], longitude=dam[LONG_FLD],
+                    range=3000, heading=56, tilt=78)
+        return la
+
+    # ...............................................
+    def write_kmz_data(self, out_kmz_fname, all_data, thumb_data, filteryear):
+        """
+        """
+        kml = skml.Kml(name='Anaya Dams', open=1)
+        folders = {}
+        style = self._get_dam_style()
         
         for relfname, dam in all_data[self.IMAGES_KEY].iteritems():
             if filteryear is None or dam['img_date'][0] == filteryear:
                 try:
-                    thumb_fname, width, height = thumb_data[relfname]
+                    thumb_fname, twidth, theight = thumb_data[relfname]
                 except:
-                    thumb_fname, width, height = ('x', 0, 0)
-                
-#                 info = """
-#                         <![CDATA[
-#                             <table width=100% cellpadding=0 cellspacing=0>
-#                                 <tr>
-#                                     <td><img width=100% src='{}' /></td>
-#                                 </tr>
-#                             </table>]]>
-#                        """.format(thumb_fname)
-                info = 'Arroyo {} - {}, {}'.format(dam['arroyo_num'], 
-                                                   dam['arroyo'], 
-                                                   dam['img_date'][0])
-                info = ('<img src="{}" alt="picture" width="{}" height="{}" align="left" />'
-                        .format(thumb_fname, width, height))
-                pnt = kml.newpoint(name=dam['dam'], 
-                                   coords=[(dam[LONG_FLD], dam[LAT_FLD])])
+                    thumb_fname, twidth, theight = ('x', 0, 0)
+                    
+                imgpth = kml.addfile(thumb_fname)
+                dam_info = self._get_dam_info(dam)
+                lookat = self._get_lookat(dam)
+
+                img_info = ('<img src="{}" alt="{}" width="{}" height="{}" align="left" />'
+                .format(imgpth, dam_info, twidth, theight))
+#                 img_info = ' '.join((dam_info, img_info))
+
+                try:
+                    fldr = folders[dam['arroyo']]
+                except:
+                    fldr = kml.newfolder(name=dam['arroyo'])
+                    folders[dam['arroyo']] = fldr
+
+                pnt = fldr.newpoint(name=dam['dam'], 
+                                    coords=[(dam[LONG_FLD], dam[LAT_FLD])])
                 pnt.style = style
-                pnt.description = info
-#                 pnt.style.balloonstyle.text = info
-                pnt.lookat = skml.LookAt(
-                    gxaltitudemode=skml.GxAltitudeMode.relativetoseafloor,
-                    latitude=dam[LAT_FLD], longitude=dam[LONG_FLD],
-                    range=3000, heading=56, tilt=78)
-                pnt.snippet.content = 'Arroyo {} - {}, {}'.format(dam['arroyo_num'], 
-                                            dam['arroyo'], dam['img_date'][0])
-                pnt.snippet.maxlines = 1
-        kml.save(out_kml_fname)
+                pnt.description = img_info
+                pnt.lookat = lookat
+#                 pnt.snippet.content = dam_info
+#                 pnt.snippet.maxlines = 1
+                
+        kml.savekmz(out_kmz_fname)
 
 
     # ...............................................
-    def resize_images(self, resize_path, all_data, width=500, alg=Image.ANTIALIAS, quality=95):
+    def resize_images(self, resize_path, all_data, width=500, 
+                      alg=Image.ANTIALIAS, quality=95):
         thumb_data = {}
         for relfname, dam in all_data[self.IMAGES_KEY].iteritems():
             origfname = dam['fullpath']
             sm_fname = os.path.join(resize_path, relfname)
-            thumbname, w, h = resize_image(origfname, sm_fname, width, alg, quality=quality)
+            thumbname, w, h = resize_image(origfname, sm_fname, width, alg, 
+                                           quality=quality, do_write=True)
             thumb_data[relfname] = (thumbname, w, h) 
                         
         return thumb_data
@@ -604,8 +638,7 @@ def getCSVWriter(datafile, delimiter, doAppend=True):
 
 
 # ...............................................
-def resize_image(infname, outfname, width, sample_method, quality):
-    readyFilename(outfname, overwrite=True)
+def resize_image(infname, outfname, width, sample_method, quality, do_write=True):
     img = Image.open(infname)
     icc_profile = img.info.get("icc_profile")
     
@@ -613,8 +646,10 @@ def resize_image(infname, outfname, width, sample_method, quality):
     height = int((float(img.size[1]) * float(wpercent)))
     size = (width, height)
     
-    img = img.resize(size, sample_method)
-    img.save(outfname, 'JPEG', quality=quality, icc_profile=icc_profile)
+    if do_write:
+        readyFilename(outfname, overwrite=True)
+        img = img.resize(size, sample_method)
+        img.save(outfname, 'JPEG', quality=quality, icc_profile=icc_profile)
     
     print('Rewrote image {} to {}'.format(infname, outfname))
     return outfname, width, height
@@ -625,13 +660,14 @@ def resize_image(infname, outfname, width, sample_method, quality):
 # ...............................................
 if __name__ == '__main__':    
     BASE_PATH='/Users/astewart/Home/Anaya'
-    THUMB_DIR = 'anaya_thumbs'
-    OUT_DIR = 'AnayaGE'
+    IN_DIR = 'anaya_pics'
+    OUT_DIR = 'AnayaMap'
     OUTNAME = 'dam_anaya'
+    THUMB_DIR = 'anaya_thumbs'
     SAT_FNAME = 'satellite/op140814.tif'
     
     filteryear = None
-    IN_DIR = 'anaya_pics'
+    
     
     maxY = 35.45045
     minY = 35.43479
@@ -646,7 +682,7 @@ if __name__ == '__main__':
     image_path = os.path.join(BASE_PATH, IN_DIR)
     thumb_path= os.path.join(BASE_PATH, OUT_DIR, THUMB_DIR)
     out_csv_fname = os.path.join(BASE_PATH, OUT_DIR, OUTNAME+'.csv')
-    out_kml_fname = os.path.join(BASE_PATH, OUT_DIR, OUTNAME+'.kml')
+    out_kmz_fname = os.path.join(BASE_PATH, OUT_DIR, OUTNAME+'.kmz')
     bbox = (minX, minY, maxX, maxY)
     
     pm = PicMapper(image_path, buffer_distance=dam_buffer, 
@@ -658,7 +694,7 @@ if __name__ == '__main__':
     print('Computed: {}'.format(pm.extent))
     thumb_data = pm.resize_images(thumb_path, dam_data, width=thumb_width, alg=Image.ANTIALIAS, quality=95)
     pm.write_csv_data(out_csv_fname, dam_data, thumb_data)
-    pm.write_kml_data(out_kml_fname, dam_data, thumb_data, filteryear)
+    pm.write_kmz_data(out_kmz_fname, dam_data, thumb_data, filteryear)
     
 
     # Reduce image sizes
@@ -693,7 +729,7 @@ DELIMITER = '\t'
 BASE_PATH='/Users/astewart/Home/Anaya'
 IN_DIR = 'anaya_pics'
 THUMB_DIR = 'anaya_thumbs'
-OUT_DIR = 'AnayaGE'
+OUT_DIR = 'AnayaMap'
 OUTNAME = 'dam_anaya'
 SAT_FNAME = 'satellite/op140814.tif'
 SAT_IMAGE_FNAME = os.path.join(BASE_PATH, SAT_FNAME)
@@ -733,7 +769,6 @@ size = (width, height)
 # sample_method = Image.LANCZOS
 # sample_method = Image.BILINEAR
 # sample_method = Image.BICUBIC
-
 
 img = img.resize(size, sample_method)
 readyFilename(outfname, overwrite=True)

@@ -2,6 +2,9 @@
 FOSSILS/
 RPMS/x86_64
 
+# ignore eclipse files
+.pydevproject
+
 # ignore python files
 python.mk
 *.pyc

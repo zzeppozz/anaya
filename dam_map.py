@@ -225,20 +225,6 @@ class PicMapper(object):
             # Create new feature, setting FID, in this layer
             lyr.CreateFeature(feat)
             feat.Destroy()
-            
-        
-#     # ...............................................
-#     def _create_kml_point(self, kml, dam):
-#         """
-#         """
-#         pnt = kml.newpoint(name=dam['dam'])
-#         pnt.lookat = skml.LookAt(gxaltitudemode=skml.GxAltitudeMode.relativetoseafloor,
-#                               latitude=dam[LAT_FLD], longitude=dam[LONG_FLD],
-#                               range=3000, heading=56, tilt=78)
-#         pnt.snippet.content = 'Arroyo {} - {}, {}'.format(dam['arroyo_num'], 
-#                                     dam['arroyo'], dam['img_date'][0])
-#         pnt.snippet.maxlines = 1
-#         print kml.kml()
         
     # ...............................................
     def _testBufferAddLocation(self, all_coords, currfname, currpointdata):
@@ -342,9 +328,9 @@ class PicMapper(object):
                 pass
         name = ntmp[:i]
         dtmp = ntmp[i:]
-        yr = dtmp[:4]
-        mo = dtmp[4:6]
-        dy = dtmp[6:]
+        yr = int(dtmp[:4])
+        mo = int(dtmp[4:6])
+        dy = int(dtmp[6:])
         
         return arroyo_num, arroyo_name, name, [yr, mo, dy], picnum       
     
@@ -441,7 +427,7 @@ class PicMapper(object):
                 csvwriter.writerow(rec)
 
     # ...............................................
-    def _get_img_info(self, tfname, twidth, theight):
+    def _get_pt_info(self, dam, imgpth, width, height):
 #         info = """
 #                 <![CDATA[
 #                     <table width=100% cellpadding=0 cellspacing=0>
@@ -450,16 +436,24 @@ class PicMapper(object):
 #                         </tr>
 #                     </table>]]>
 #                """.format(tfname)
-        info = ('<img src="{}" alt="picture" width="{}" height="{}" align="left" />'
-                .format(tfname, twidth, theight))
-        return info
-
-    # ...............................................
-    def _get_dam_info(self, dam):
-        info = 'Arroyo {} - {}, {}'.format(dam['arroyo_num'], 
+#         info = ('<img src="{}" alt="picture" width="{}" height="{}" align="left" />'
+#                 .format(imgpth, twidth, theight))
+        dam_info = 'Arroyo {} - {}, {}'.format(dam['arroyo_num'], 
                                            dam['arroyo'], 
                                            dam['img_date'][0])
-        return info
+        if height is None:
+            dims = 'width="100%"'
+        else:
+            dims = 'width="{}" height="{}"'.format(width, height)
+        
+        img_info = ('<img src="{}" alt="picture" {} align="left" />'
+                    .format(imgpth, dims))
+        
+        lookat = la = skml.LookAt(gxaltitudemode=skml.GxAltitudeMode.relativetoseafloor,
+                    latitude=dam[LAT_FLD], longitude=dam[LONG_FLD],
+                    range=3000, heading=56, tilt=78)
+        
+        return dam_info, img_info, lookat
 
     # ...............................................
     def _get_dam_style(self):
@@ -469,41 +463,33 @@ class PicMapper(object):
         style.labelstyle.color = 'ffff00ff'
         style.iconstyle.scale = 1.0
         style.balloonstyle.bgcolor = skml.Color.bisque
-        style.balloonstyle.textcolor = skml.Color.rgb(255, 255, 255)
+        style.balloonstyle.textcolor = skml.Color.rgb(0,0,0)
         return style
 
     # ...............................................
-    def _get_lookat(self, dam):
+    def write_ge_data(self, out_fname_woext, all_data, photo_data, filteryear,
+                      ftype='kmz'):
         """
+        @param ftype: 'kmz' will use thumbnails and include in file.
+                      'kml' will use full images and point to local file.
         """
-        la = skml.LookAt(gxaltitudemode=skml.GxAltitudeMode.relativetoseafloor,
-                    latitude=dam[LAT_FLD], longitude=dam[LONG_FLD],
-                    range=3000, heading=56, tilt=78)
-        return la
-
-    # ...............................................
-    def write_kmz_data(self, out_kmz_fname, all_data, thumb_data, filteryear):
-        """
-        """
+        if ftype not in ('kml', 'kmz'):
+            raise Exception('Invalid Google Earth filetype {}'.format(ftype))
+        out_fname = out_fname_woext + '.' + ftype
         kml = skml.Kml(name='Anaya Dams', open=1)
         folders = {}
         style = self._get_dam_style()
         
         for relfname, dam in all_data[self.IMAGES_KEY].iteritems():
             if filteryear is None or dam['img_date'][0] == filteryear:
-                try:
-                    thumb_fname, twidth, theight = thumb_data[relfname]
-                except:
-                    thumb_fname, twidth, theight = ('x', 0, 0)
-                    
-                imgpth = kml.addfile(thumb_fname)
-                dam_info = self._get_dam_info(dam)
-                lookat = self._get_lookat(dam)
-
-                img_info = ('<img src="{}" alt="{}" width="{}" height="{}" align="left" />'
-                .format(imgpth, dam_info, twidth, theight))
-#                 img_info = ' '.join((dam_info, img_info))
-
+                img_fname, width, height = photo_data[relfname]
+                if ftype == 'kmz':
+                    imgpth = kml.addfile(img_fname)
+                else:
+                    imgpth = img_fname
+                dam_info, img_info, lookat = self._get_pt_info(dam, 
+                                            imgpth, width, height)
+                
                 try:
                     fldr = folders[dam['arroyo']]
                 except:
@@ -514,25 +500,31 @@ class PicMapper(object):
                                     coords=[(dam[LONG_FLD], dam[LAT_FLD])])
                 pnt.style = style
                 pnt.description = img_info
-                pnt.lookat = lookat
-#                 pnt.snippet.content = dam_info
-#                 pnt.snippet.maxlines = 1
+                for k, v in dam.iteritems():
+                    pnt.extendeddata.newdata(k, v)
+#                 pnt.lookat = lookat
                 
-        kml.savekmz(out_kmz_fname)
-
-
+                pnt.snippet.content = dam_info
+                pnt.snippet.maxlines = 1
+        self._log('Saving GE file {}'.format(out_fname))
+        kml.savekmz(out_fname)
     # ...............................................
     def resize_images(self, resize_path, all_data, width=500, 
-                      alg=Image.ANTIALIAS, quality=95):
+                      alg=Image.ANTIALIAS, quality=95, overwrite=True):
         thumb_data = {}
+        pic_data = {}
         for relfname, dam in all_data[self.IMAGES_KEY].iteritems():
             origfname = dam['fullpath']
             sm_fname = os.path.join(resize_path, relfname)
-            thumbname, w, h = resize_image(origfname, sm_fname, width, alg, 
-                                           quality=quality, do_write=True)
-            thumb_data[relfname] = (thumbname, w, h) 
+            
+            origsize, smsize = resize_image(origfname, sm_fname, width, alg, 
+                                            quality=quality, 
+                                            overwrite=do_write)
+            
+            thumb_data[relfname] = (sm_fname, smsize[0], smsize[1]) 
+            pic_data[relfname] = (origfname, origsize[0], origsize[1]) 
                         
-        return thumb_data
+        return thumb_data, pic_data
 
 # .............................................................................
 def getLogger(outpath):
@@ -638,21 +630,23 @@ def getCSVWriter(datafile, delimiter, doAppend=True):
 
 
 # ...............................................
-def resize_image(infname, outfname, width, sample_method, quality, do_write=True):
+def resize_image(infname, outfname, width, sample_method, quality, overwrite=True):
     img = Image.open(infname)
     icc_profile = img.info.get("icc_profile")
     
     wpercent = (width / float(img.size[0]))
     height = int((float(img.size[1]) * float(wpercent)))
-    size = (width, height)
+    newsize = (width, height)
     
-    if do_write:
-        readyFilename(outfname, overwrite=True)
-        img = img.resize(size, sample_method)
+    ready = readyFilename(outfname, overwrite=overwrite)
+    if ready is True:
+        img = img.resize(newsize, sample_method)
         img.save(outfname, 'JPEG', quality=quality, icc_profile=icc_profile)
-    
-    print('Rewrote image {} to {}'.format(infname, outfname))
-    return outfname, width, height
+        print('Rewrote image {} to {}'.format(infname, outfname))
+    else:
+        print('File exists or delete failed')
+        
+    return img.size, newsize
 
 
 # .............................................................................
@@ -664,6 +658,7 @@ if __name__ == '__main__':
     OUT_DIR = 'AnayaMap'
     OUTNAME = 'dam_anaya'
     THUMB_DIR = 'anaya_thumbs'
+    THUMB_DIR_SM = 'anaya_small_thumb'
     SAT_FNAME = 'satellite/op140814.tif'
     
     filteryear = None
@@ -676,13 +671,18 @@ if __name__ == '__main__':
     
     dam_buffer = .0002
     thumb_width = 500
+    thumb_width_sm = 200
+    do_write = False
     
 #     log = getLogger(os.path.join(BASE_PATH, OUT_DIR))
     log = None
     image_path = os.path.join(BASE_PATH, IN_DIR)
-    thumb_path= os.path.join(BASE_PATH, OUT_DIR, THUMB_DIR)
-    out_csv_fname = os.path.join(BASE_PATH, OUT_DIR, OUTNAME+'.csv')
-    out_kmz_fname = os.path.join(BASE_PATH, OUT_DIR, OUTNAME+'.kmz')
+    thumb_path = os.path.join(BASE_PATH, OUT_DIR, THUMB_DIR)
+    thumb_path_sm = os.path.join(BASE_PATH, OUT_DIR, THUMB_DIR_SM)
+    out_fname_woext = os.path.join(BASE_PATH, OUT_DIR, OUTNAME)
+    out_kml_fname = out_fname_woext + '.kml'
+    out_csv_fname = out_fname_woext + '.csv'
+    out_kmz_fname = out_fname_woext + '.kmz'
     bbox = (minX, minY, maxX, maxY)
     
     pm = PicMapper(image_path, buffer_distance=dam_buffer, 
@@ -692,23 +692,30 @@ if __name__ == '__main__':
     dam_data = pm.read_image_data()
     print('Given: {}'.format(pm.bbox))
     print('Computed: {}'.format(pm.extent))
-    thumb_data = pm.resize_images(thumb_path, dam_data, width=thumb_width, alg=Image.ANTIALIAS, quality=95)
-    pm.write_csv_data(out_csv_fname, dam_data, thumb_data)
-    pm.write_kmz_data(out_kmz_fname, dam_data, thumb_data, filteryear)
     
-
-    # Reduce image sizes
+    # Thumb (500) vs thumb_sm = 200
+    width = thumb_width_sm
+    outpath = thumb_path_sm
+    # Writes if 
+    thumb_data, pic_data = pm.resize_images(outpath, dam_data, 
+                                            width=width, 
+                                            alg=Image.ANTIALIAS, 
+                                            quality=95, 
+                                            overwrite=False)
+    
+    pm.write_csv_data(out_csv_fname, dam_data, thumb_data)
+    pm.write_ge_data(out_fname_woext, dam_data, thumb_data, filteryear,ftype='kmz')
+#     pm.write_ge_data(out_fname_woext, dam_data, pic_data, filteryear,ftype='kml')
+    
     t = time.localtime()
     stamp = '{}_{}_{}-{}_{}'.format(t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min)
 
 
 '''
 p2_gdal_loc = '/Library/Frameworks/GDAL.framework/Versions/2.1/Python/2.7/site-packages'
-p2_pil_loc = '/Library/Python/2.7/site-packages/'
 
 import sys
 sys.path.insert(0, p2_gdal_loc)
-sys.path.insert(0, p2_pil_loc)
 
 import csv
 import exifread
@@ -759,12 +766,10 @@ sample_method = Image.ANTIALIAS
 img = Image.open(infname)
 icc_profile = img.info.get("icc_profile")
 img = img.resize(size, sample_method)
-readyFilename(outfname, overwrite=True)
-img.save(outfname, icc_profile=icc_profile, quality=95)
 
 wpercent = (width / float(img.size[0]))
 height = int((float(img.size[1]) * float(wpercent)))
-size = (width, height)
+newsize = (width, height)
 
 # sample_method = Image.LANCZOS
 # sample_method = Image.BILINEAR
@@ -797,5 +802,18 @@ pm.write_kml_data(out_kml_fname, dam_data)
 t = time.localtime()
 stamp = '{}_{}_{}-{}_{}'.format(t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min)
 
+
+>>> dir(pnt)
+['__class__', '__delattr__', '__dict__', '__doc__', '__format__', 
+'__getattribute__', '__hash__', '__init__', '__module__', '__new__', 
+'__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__sizeof__', 
+'__str__', '__subclasshook__', '__weakref__', '_chrconvert', '_compiling', 
+'_currentroot', '_globalid', '_id', '_kml', '_namespaces', '_parent', 
+'_placemark', '_style', '_stylemap', 'addfile', 'address', 'altitudemode', 
+'atomauthor', 'atomlink', 'balloonstyle', 'camera', 'coords', 'description', 
+'extendeddata', 'extrude', 'gxaltitudemode', 'gxballoonvisibility', 
+'iconstyle', 'id', 'labelstyle', 'linestyle', 'liststyle', 'lookat', 'name', 
+'phonenumber', 'placemark', 'polystyle', 'region', 'snippet', 'style', 
+'stylemap', 'timespan', 'timestamp', 'visibility', 'xaladdressdetails']
 
 '''

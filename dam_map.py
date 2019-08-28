@@ -441,6 +441,7 @@ class PicMapper(object):
         dam_info = 'Arroyo {} - {}, {}'.format(dam['arroyo_num'], 
                                            dam['arroyo'], 
                                            dam['img_date'][0])
+        
         if height is None:
             dims = 'width="100%"'
         else:
@@ -483,10 +484,14 @@ class PicMapper(object):
         for relfname, dam in all_data[self.IMAGES_KEY].iteritems():
             if filteryear is None or dam['img_date'][0] == filteryear:
                 img_fname, width, height = photo_data[relfname]
+                
+                # Include thumbnails in KMZ
                 if ftype == 'kmz':
                     imgpth = kml.addfile(img_fname)
+                # Reference larger local files in KML
                 else:
                     imgpth = img_fname
+                    
                 dam_info, img_info, lookat = self._get_pt_info(dam, 
                                             imgpth, width, height)
                 
@@ -498,14 +503,12 @@ class PicMapper(object):
 
                 pnt = fldr.newpoint(name=dam['dam'], 
                                     coords=[(dam[LONG_FLD], dam[LAT_FLD])])
-                pnt.style = style
                 pnt.description = img_info
-                for k, v in dam.iteritems():
-                    pnt.extendeddata.newdata(k, v)
+                pnt.style = style
+#                 pnt.style.balloonstyle.text = dam_info
 #                 pnt.lookat = lookat
-                
-                pnt.snippet.content = dam_info
-                pnt.snippet.maxlines = 1
+#                 pnt.snippet.content = dam_info
+#                 pnt.snippet.maxlines = 1
         self._log('Saving GE file {}'.format(out_fname))
         kml.savekmz(out_fname)
     # ...............................................
@@ -694,8 +697,10 @@ if __name__ == '__main__':
     print('Computed: {}'.format(pm.extent))
     
     # Thumb (500) vs thumb_sm = 200
-    width = thumb_width_sm
-    outpath = thumb_path_sm
+#     width = thumb_width_sm
+#     outpath = thumb_path_sm
+    width = thumb_width
+    outpath = thumb_path
     # Writes if 
     thumb_data, pic_data = pm.resize_images(outpath, dam_data, 
                                             width=width, 

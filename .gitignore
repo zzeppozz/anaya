@@ -9,3 +9,4 @@ RPMS/x86_64
 python.mk
 *.pyc
 
+dam_map.log

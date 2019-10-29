@@ -58,7 +58,7 @@ class PicMapper(object):
 # Constructor
 # .............................................................................
     def __init__(self, image_path, buffer_distance=.002, 
-                 bbox=(-180, -90, 180, 90), logger=None):
+                 bbox=None, logger=None):
         """
         @param image_path: Root path for image files to be processed
         @param image_buffer: Buffer in which images are considered to be the 
@@ -70,18 +70,28 @@ class PicMapper(object):
         self.buffer_distance = buffer_distance
         self.bbox = bbox
         # Compute actual bounds of the data
-        self._minX = bbox[0]
-        self._minY = bbox[1]
-        self._maxX = bbox[2]
-        self._maxY = bbox[3]
+        self._minX = None
+        self._minY = None
+        self._maxX = None
+        self._maxY = None
         self._logger = logger
     
     # ...............................................
     def _getDate(self, tags):
+        # Returns [yr, mo, day] or None
+        gpsdate = (None, None, None)
         # Get date
-        dtstr = tags[IMGMETA.DATE_KEY].values
-        [yr, mo, day] = [int(x) for x in dtstr.split(':')]
-        return  yr, mo, day
+        try:
+            dtstr = tags[IMGMETA.DATE_KEY].values
+        except Exception as e:
+            self._log('Failed to get {}'.format(IMGMETA.DATE_KEY))
+        else:
+            try:
+                gpsdate = [int(x) for x in dtstr.split(':')]
+            except Exception as e:
+                self._log('Invalid date {}'.format(dtstr))
+
+        return gpsdate
     
     # ...............................................
     def _log(self, msg):
@@ -92,20 +102,25 @@ class PicMapper(object):
             
     # ...............................................
     def _parse_coordinate(self, tags, locKey, dirKey, negativeIndicator):
+        dd = degrees = minutes = seconds = direction = None
         isNegative = False
         # Get longitude or latitude
-        degObj, minObj, secObj = tags[locKey].values
-        direction = tags[dirKey].printable
-        if direction == negativeIndicator:
-            isNegative = True
-        # Convert to float
-        degrees = degObj.num / float(degObj.den) 
-        minutes = minObj.num / float(minObj.den)
-        seconds = secObj.num / float(secObj.den)    
-        # Convert to decimal degrees
-        dd = (seconds/3600) + (minutes/60) + degrees
-        if isNegative:
-            dd = -1 * dd
+        try:
+            degObj, minObj, secObj = tags[locKey].values
+        except:
+            pass
+        else:
+            direction = tags[dirKey].printable
+            if direction == negativeIndicator:
+                isNegative = True
+            # Convert to float
+            degrees = degObj.num / float(degObj.den) 
+            minutes = minObj.num / float(minObj.den)
+            seconds = secObj.num / float(secObj.den)    
+            # Convert to decimal degrees
+            dd = (seconds/3600) + (minutes/60) + degrees
+            if isNegative:
+                dd = -1 * dd
         return dd, degrees, minutes, seconds, direction
     
     # ...............................................
@@ -127,7 +142,11 @@ class PicMapper(object):
         """
         @todo: gather bounds from images
         """
-        (minX, minY, maxX, maxY) = self.bbox
+        # TODO: use computed extent or provided bbox for KMZ file?
+        if self.bbox is not None:
+            (minX, minY, maxX, maxY) = self.bbox
+        else:
+            (minX, minY, maxX, maxY) = self.extent
         if os.path.exists(fname):
             os.remove(fname)
         foldername, _ = os.path.splitext(os.path.basename(fname))
@@ -251,13 +270,13 @@ class PicMapper(object):
             outfname = out_image_path + relativePath
             self._reduceImageSize(infname, outfname)
             
-            print('Writing feature {} to existing {} locations'.format(
+            self._log('Writing feature {} to existing {} locations'.format(
                 outfname, len(all_coords)))
             all_coords = self._testBufferAddLocation(all_coords, outfname, pointdata)
             self._createFeatureInLayer(lyr, outfname, pointdata, start_idx)
             
         dataset.Destroy()
-        print('Closed/wrote dataset %s' % shp_fname)
+        self._log('Closed/wrote dataset %s' % shp_fname)
         success = True
         self._log('Success {} writing shapefile {}'.format(success, 
                                                            shp_fname))
@@ -275,15 +294,17 @@ class PicMapper(object):
             self._log('{}: Unable to read image metadata'.format(fullname))
         finally:
             f.close()
+            
         try:
             dd, xdms, ydms = self._getDD(tags)
         except Exception as e:
-            self._log('{}: Unable to get x y'.format(fullname))
+            self._log('{}: Unable to get x y, ({})'.format(fullname, e))
+            
         try:
-            yr, mo, day = self._getDate(tags)
+            (yr, mo, day) = self._getDate(tags)
         except Exception as e:
-            self._log('{}: Unable to get date'.format(fullname))
-        return [yr, mo, day], dd, xdms, ydms
+            self._log('{}: Unable to get date, ({})'.format(fullname, e))
+        return (yr, mo, day), dd, xdms, ydms
     
     # ...............................................
     def evaluate_extent(self, dd):
@@ -353,47 +374,49 @@ class PicMapper(object):
             for fname in files:
                 if fname.endswith('jpg') or fname.endswith('JPG'): 
                     img_count += 1
+                    self._log('Read {} image {}'.format(img_count, fname))
+
                     fullfname = os.path.join(root, fname)
                     relfname = fullfname[len(self.image_path)+1:]
                     xdeg = xmin = xsec = xdir = ydeg = ymin = ysec = ydir = wkt = ''
     
                     arroyo_num, arroyo_name, dam_name, dam_date, picnum = \
                         self.parse_relfname(relfname)
-                    [yr, mo, day], (xdd, ydd), xdms, ydms = self.get_image_metadata(fullfname)
-                    
-                    if xdms is not None:
-                        (xdeg, xmin, xsec, xdir) = xdms
-                    if ydms is not None:
-                        (ydeg, ymin, ysec, ydir) = ydms
-                    if xdd is not None and ydd is not None:
+                    gpsdate, (xdd, ydd), xdms, ydms = self.get_image_metadata(fullfname)
+                                        
+                    if xdd is None or ydd is None:
+                        self._log('Failed to return decimal degrees for {}'.format(relfname))
+                    else:
                         wkt = 'Point ({:.7f}  {:.7f})'.format(xdd, ydd)
                         img_count_geo += 1
                         self.evaluate_extent((xdd, ydd))
-                    else:
-                        self._log('Failed to return decimal degrees for {}'.format(relfname))
+                        
+                        [yr, mo, day] = gpsdate
+                        (xdeg, xmin, xsec, xdir) = xdms
+                        (ydeg, ymin, ysec, ydir) = ydms
                     
-                    IMGMETA[relfname] = {'arroyo': arroyo_name, 
-                                          'arroyo_num': arroyo_num,
-                                          'dam': dam_name,
-                                          'dam_num': picnum,
-                                          'dam_date': dam_date,
-                                          'img_date': [yr, mo, day],
-                                          LONG_FLD: xdd,
-                                          LAT_FLD: ydd,
-                                          GEOM_WKT: wkt,
-                                          'xdirection': xdir,
-                                          'xdegrees': xdeg,
-                                          'xminutes': xmin, 
-                                          'xseconds': xsec,
-                                          'ydirection': ydir,
-                                          'ydegrees': ydeg,
-                                          'yminutes': ymin,
-                                          'yseconds': ysec,
-                                          'fullpath': fullfname}
-                    try:
-                        arroyos[arroyo_name].append(relfname)
-                    except:
-                        arroyos[arroyo_name] = [relfname]
+                        IMGMETA[relfname] = {'arroyo': arroyo_name, 
+                                              'arroyo_num': arroyo_num,
+                                              'dam': dam_name,
+                                              'dam_num': picnum,
+                                              'dam_date': dam_date,
+                                              'img_date': [yr, mo, day],
+                                              LONG_FLD: xdd,
+                                              LAT_FLD: ydd,
+                                              GEOM_WKT: wkt,
+                                              'xdirection': xdir,
+                                              'xdegrees': xdeg,
+                                              'xminutes': xmin, 
+                                              'xseconds': xsec,
+                                              'ydirection': ydir,
+                                              'ydegrees': ydeg,
+                                              'yminutes': ymin,
+                                              'yseconds': ysec,
+                                              'fullpath': fullfname}
+                        try:
+                            arroyos[arroyo_name].append(relfname)
+                        except:
+                            arroyos[arroyo_name] = [relfname]
 
         all_data['arroyo_count'] = len(arroyos.keys())
         all_data['arroyos'] = arroyos
@@ -457,14 +480,17 @@ class PicMapper(object):
         return dam_info, img_info, lookat
 
     # ...............................................
-    def _get_dam_style(self):
+    def _get_dam_style(self, img_info):
         """
         """
         style = skml.Style()
-        style.labelstyle.color = 'ffff00ff'
-        style.iconstyle.scale = 1.0
+        style.labelstyle.color = skml.Color.sienna
+        style.iconstyle.scale = 0.5
+        style.iconstyle.icon.href = 'http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png'
+        style.iconstyle.color = skml.Color.sienna
         style.balloonstyle.bgcolor = skml.Color.bisque
         style.balloonstyle.textcolor = skml.Color.rgb(0,0,0)
+        style.balloonstyle.text = img_info
         return style
 
     # ...............................................
@@ -478,8 +504,8 @@ class PicMapper(object):
             raise Exception('Invalid Google Earth filetype {}'.format(ftype))
         out_fname = out_fname_woext + '.' + ftype
         kml = skml.Kml(name='Anaya Dams', open=1)
+        icon_fname = os.path.join(self.image_path, 'rockpile.png')
         folders = {}
-        style = self._get_dam_style()
         
         for relfname, dam in all_data[self.IMAGES_KEY].iteritems():
             if filteryear is None or dam['img_date'][0] == filteryear:
@@ -503,9 +529,8 @@ class PicMapper(object):
 
                 pnt = fldr.newpoint(name=dam['dam'], 
                                     coords=[(dam[LONG_FLD], dam[LAT_FLD])])
-                pnt.description = img_info
-                pnt.style = style
-#                 pnt.style.balloonstyle.text = dam_info
+                pnt.description = dam_info
+                pnt.style = self._get_dam_style(img_info)
 #                 pnt.lookat = lookat
 #                 pnt.snippet.content = dam_info
 #                 pnt.snippet.maxlines = 1
@@ -513,16 +538,17 @@ class PicMapper(object):
         kml.savekmz(out_fname)
     # ...............................................
     def resize_images(self, resize_path, all_data, width=500, 
-                      alg=Image.ANTIALIAS, quality=95, overwrite=True):
+                      alg=Image.ANTIALIAS, quality=95, overwrite=False):
         thumb_data = {}
         pic_data = {}
+        self._log('Resize {} images'.format(len(all_data[self.IMAGES_KEY])))
         for relfname, dam in all_data[self.IMAGES_KEY].iteritems():
             origfname = dam['fullpath']
             sm_fname = os.path.join(resize_path, relfname)
             
             origsize, smsize = resize_image(origfname, sm_fname, width, alg, 
                                             quality=quality, 
-                                            overwrite=do_write)
+                                            overwrite=overwrite)
             
             thumb_data[relfname] = (sm_fname, smsize[0], smsize[1]) 
             pic_data[relfname] = (origfname, origsize[0], origsize[1]) 
@@ -633,7 +659,7 @@ def getCSVWriter(datafile, delimiter, doAppend=True):
 
 
 # ...............................................
-def resize_image(infname, outfname, width, sample_method, quality, overwrite=True):
+def resize_image(infname, outfname, width, sample_method, quality, overwrite=False):
     img = Image.open(infname)
     icc_profile = img.info.get("icc_profile")
     
@@ -646,8 +672,6 @@ def resize_image(infname, outfname, width, sample_method, quality, overwrite=Tru
         img = img.resize(newsize, sample_method)
         img.save(outfname, 'JPEG', quality=quality, icc_profile=icc_profile)
         print('Rewrote image {} to {}'.format(infname, outfname))
-    else:
-        print('File exists or delete failed')
         
     return img.size, newsize
 
@@ -656,21 +680,15 @@ def resize_image(infname, outfname, width, sample_method, quality, overwrite=Tru
 # .............................................................................
 # ...............................................
 if __name__ == '__main__':    
-    BASE_PATH='/Users/astewart/Home/Anaya'
-    IN_DIR = 'anaya_pics'
-    OUT_DIR = 'AnayaMap'
+    BASE_PATH='/Users/astewart/Home/Anaya/2019'
+    IN_DIR = 'orig'
+    OUT_DIR = 'out'
     OUTNAME = 'dam_anaya'
-    THUMB_DIR = 'anaya_thumbs'
-    THUMB_DIR_SM = 'anaya_small_thumb'
+    THUMB_DIR = 'thumb'
+    THUMB_DIR_SM = 'small_thumb'
     SAT_FNAME = 'satellite/op140814.tif'
     
     filteryear = None
-    
-    
-    maxY = 35.45045
-    minY = 35.43479
-    maxX = -106.05353
-    minX = -106.07259
     
     dam_buffer = .0002
     thumb_width = 500
@@ -686,139 +704,35 @@ if __name__ == '__main__':
     out_kml_fname = out_fname_woext + '.kml'
     out_csv_fname = out_fname_woext + '.csv'
     out_kmz_fname = out_fname_woext + '.kmz'
-    bbox = (minX, minY, maxX, maxY)
     
-    pm = PicMapper(image_path, buffer_distance=dam_buffer, 
-                   bbox=bbox, logger=log)
+    t = time.localtime()
+    tstamp = '{}-{}-{}T{}:{}'.format(t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min)
+    print('# Start {}'.format(tstamp))
+    print('Create KMZ {} for images in {}'.format(out_kmz_fname, image_path))
+    
+    pm = PicMapper(image_path, buffer_distance=dam_buffer, logger=log)
     
     # Read data
     dam_data = pm.read_image_data()
     print('Given: {}'.format(pm.bbox))
     print('Computed: {}'.format(pm.extent))
     
-    # Thumb (500) vs thumb_sm = 200
-#     width = thumb_width_sm
-#     outpath = thumb_path_sm
     width = thumb_width
     outpath = thumb_path
-    # Writes if 
+
+    # Write thumbnail images
     thumb_data, pic_data = pm.resize_images(outpath, dam_data, 
                                             width=width, 
                                             alg=Image.ANTIALIAS, 
                                             quality=95, 
                                             overwrite=False)
     
+    # Write geo files
     pm.write_csv_data(out_csv_fname, dam_data, thumb_data)
     pm.write_ge_data(out_fname_woext, dam_data, thumb_data, filteryear,ftype='kmz')
-#     pm.write_ge_data(out_fname_woext, dam_data, pic_data, filteryear,ftype='kml')
     
     t = time.localtime()
-    stamp = '{}_{}_{}-{}_{}'.format(t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min)
-
-
+    tstamp = '{}-{}-{}T{}:{}'.format(t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min)
+    print('# End {}'.format(tstamp))
 '''
-p2_gdal_loc = '/Library/Frameworks/GDAL.framework/Versions/2.1/Python/2.7/site-packages'
-
-import sys
-sys.path.insert(0, p2_gdal_loc)
-
-import csv
-import exifread
-import os
-from osgeo import ogr, osr
-import logging
-from logging.handlers import RotatingFileHandler
-from PIL import Image
-import simplekml as skml
-import time
-from dam_map import *
-
-GEOM_WKT = "geomwkt"
-LONG_FLD = 'longitude'
-LAT_FLD = 'latitude'
-
-DELIMITER = '\t'
-BASE_PATH='/Users/astewart/Home/Anaya'
-IN_DIR = 'anaya_pics'
-THUMB_DIR = 'anaya_thumbs'
-OUT_DIR = 'AnayaMap'
-OUTNAME = 'dam_anaya'
-SAT_FNAME = 'satellite/op140814.tif'
-SAT_IMAGE_FNAME = os.path.join(BASE_PATH, SAT_FNAME)
-
-maxY = 35.45045
-minY = 35.43479
-maxX = -106.05353
-minX = -106.07259
-
-dam_buffer = .0002
-resize_width = 500
-
-log = None
-image_path = os.path.join(BASE_PATH, IN_DIR)
-resize_path= os.path.join(BASE_PATH, OUT_DIR, THUMB_DIR)
-out_csv_fname = os.path.join(BASE_PATH, OUT_DIR, OUTNAME+'.csv')
-out_kml_fname = os.path.join(BASE_PATH, OUT_DIR, OUTNAME+'.kml')
-bbox = (minX, minY, maxX, maxY)
-
-################################################
-infname = '/Users/astewart/Home/Anaya/anaya_pics/33)Conglomerate/conglomerate20151008_001.JPG'
-outfname = '/Users/astewart/Home/Anaya/AnayaGE/anaya_thumbs/33)Conglomerate/conglomerate20151008_001.JPG'
-width = 500
-sample_method = Image.ANTIALIAS
-
-# def resize_image(infname, outfname, width, sample_method):
-img = Image.open(infname)
-icc_profile = img.info.get("icc_profile")
-img = img.resize(size, sample_method)
-
-wpercent = (width / float(img.size[0]))
-height = int((float(img.size[1]) * float(wpercent)))
-newsize = (width, height)
-
-# sample_method = Image.LANCZOS
-# sample_method = Image.BILINEAR
-# sample_method = Image.BICUBIC
-
-img = img.resize(size, sample_method)
-readyFilename(outfname, overwrite=True)
-img.save(outfname, icc_profile=icc_profile, quality=95)
-
-img2 = Image.open(outfname)
-icc_profile2 = img.info.get("icc_profile")
-if icc_profile == icc_profile2:
-    print 'color profile is same'
-
-print('Rewrote image {} to {}'.format(infname, outfname))
-################################################
-
-pm = PicMapper(image_path, buffer_distance=dam_buffer, 
-               bbox=bbox, logger=log)
-
-# Read data
-dam_data = pm.read_image_data()
-print('Given: {}'.format(pm.bbox))
-print('Computed: {}'.format(pm.extent))
-thumb_files = pm.resize_images(resize_path, dam_data, resize_width=500)
-pm.write_csv_data(out_csv_fname, dam_data)
-pm.write_kml_data(out_kml_fname, dam_data)
-
-# Reduce image sizes
-t = time.localtime()
-stamp = '{}_{}_{}-{}_{}'.format(t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min)
-
-
->>> dir(pnt)
-['__class__', '__delattr__', '__dict__', '__doc__', '__format__', 
-'__getattribute__', '__hash__', '__init__', '__module__', '__new__', 
-'__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__sizeof__', 
-'__str__', '__subclasshook__', '__weakref__', '_chrconvert', '_compiling', 
-'_currentroot', '_globalid', '_id', '_kml', '_namespaces', '_parent', 
-'_placemark', '_style', '_stylemap', 'addfile', 'address', 'altitudemode', 
-'atomauthor', 'atomlink', 'balloonstyle', 'camera', 'coords', 'description', 
-'extendeddata', 'extrude', 'gxaltitudemode', 'gxballoonvisibility', 
-'iconstyle', 'id', 'labelstyle', 'linestyle', 'liststyle', 'lookat', 'name', 
-'phonenumber', 'placemark', 'polystyle', 'region', 'snippet', 'style', 
-'stylemap', 'timespan', 'timestamp', 'visibility', 'xaladdressdetails']
-
 '''

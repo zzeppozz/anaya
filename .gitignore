@@ -10,3 +10,4 @@ python.mk
 *.pyc
 
 dam_map.log
+.DS_Store

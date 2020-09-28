@@ -16,28 +16,12 @@ from PIL import Image
 import simplekml as skml
 import time
 
-GEOM_WKT = "geomwkt"
-LONG_FLD = 'longitude'
-LAT_FLD = 'latitude'
+from constants import (
+    GEOM_WKT, LONG_FLD, LAT_FLD, DELIMITER, 
+    LOG_FORMAT, LOG_DATE_FORMAT, LOG_MAX,
+    BASE_PATH, IN_DIR, THUMB_DIR, THUMB_DIR_SMALL,
+    OUT_DIR, OUTNAME, SAT_FNAME, IMG_META)
 
-DELIMITER = '\t'
-
-# LOG_FORMAT = ' '.join(["%(asctime)s",
-#                    "%(threadName)s.%(module)s.%(funcName)s",
-#                    "line",
-#                    "%(lineno)d",
-#                    "%(levelname)-8s",
-#                    "%(message)s"])
-# 
-# LOG_DATE_FORMAT = '%d %b %Y %H:%M'
-
-# .............................................................................
-class IMGMETA:
-    X_KEY = 'GPS GPSLongitude'
-    X_DIR_KEY = 'GPS GPSLongitudeRef'
-    Y_KEY = 'GPS GPSLatitude'
-    Y_DIR_KEY = 'GPS GPSLatitudeRef'
-    DATE_KEY = 'GPS GPSDate'
 
 # .............................................................................
 class PicMapper(object):
@@ -77,21 +61,21 @@ class PicMapper(object):
         self._logger = logger
     
     # ...............................................
-    def _getDate(self, tags):
+    def _get_date(self, tags):
         # Returns [yr, mo, day] or None
-        gpsdate = (None, None, None)
+        gps_date = (None, None, None)
         # Get date
         try:
-            dtstr = tags[IMGMETA.DATE_KEY].values
-        except Exception as e:
-            self._log('Failed to get {}'.format(IMGMETA.DATE_KEY))
+            dtstr = tags[IMG_META.DATE_KEY].values
+        except Exception:
+            self._log('Failed to get {}'.format(IMG_META.DATE_KEY))
         else:
             try:
-                gpsdate = [int(x) for x in dtstr.split(':')]
-            except Exception as e:
+                gps_date = [int(x) for x in dtstr.split(':')]
+            except Exception:
                 self._log('Invalid date {}'.format(dtstr))
 
-        return gpsdate
+        return gps_date
     
     # ...............................................
     def _log(self, msg):
@@ -126,9 +110,9 @@ class PicMapper(object):
     # ...............................................
     def _getDD(self, tags):
         xdd, xdeg, xmin, xsec, xdir = self._parse_coordinate(
-            tags, IMGMETA.X_KEY, IMGMETA.X_DIR_KEY, 'W')
+            tags, IMG_META.X_KEY, IMG_META.X_DIR_KEY, 'W')
         ydd, ydeg, ymin, ysec, ydir = self._parse_coordinate(
-            tags, IMGMETA.Y_KEY, IMGMETA.Y_DIR_KEY, 'S')
+            tags, IMG_META.Y_KEY, IMG_META.Y_DIR_KEY, 'S')
         
         # Convert to desired format
         dd = (xdd, ydd)
@@ -212,7 +196,7 @@ class PicMapper(object):
          (xdeg, xmin, xsec, xdir), (ydeg, ymin, ysec, ydir)) = pointdata
         pth, basefname = os.path.split(fname)
         relative_path = fname[start_idx:]    
-        tmp, lastArroyo = os.path.split(pth)
+        _, lastArroyo = os.path.split(pth)
         feat = ogr.Feature( lyr.GetLayerDefn() )
         try:
             feat.SetField('arroyo', lastArroyo)
@@ -301,7 +285,7 @@ class PicMapper(object):
             self._log('{}: Unable to get x y, ({})'.format(fullname, e))
             
         try:
-            (yr, mo, day) = self._getDate(tags)
+            (yr, mo, day) = self._get_date(tags)
         except Exception as e:
             self._log('{}: Unable to get date, ({})'.format(fullname, e))
         return (yr, mo, day), dd, xdms, ydms
@@ -334,7 +318,7 @@ class PicMapper(object):
         parts = relfname.split(os.sep)
         arroyo = parts[0]
         arroyo_num, arroyo_name = arroyo.split(')')
-        basename, ext = os.path.splitext(parts[-1])
+        basename, _ = os.path.splitext(parts[-1])
         
         if len(parts) != 2:
             self._log('Relative path parts {}'.format(parts))
@@ -367,10 +351,10 @@ class PicMapper(object):
                     'dam_count_geo': None,
                     self.IMAGES_KEY: []}
         arroyos = {}
-        IMGMETA = {}
+        IMG_META = {}
         img_count = 0
         img_count_geo = 0
-        for root, dirs, files in os.walk(self.image_path):
+        for root, _, files in os.walk(self.image_path):
             for fname in files:
                 if fname.endswith('jpg') or fname.endswith('JPG'): 
                     img_count += 1
@@ -395,7 +379,7 @@ class PicMapper(object):
                         (xdeg, xmin, xsec, xdir) = xdms
                         (ydeg, ymin, ysec, ydir) = ydms
                     
-                        IMGMETA[relfname] = {'arroyo': arroyo_name, 
+                        IMG_META[relfname] = {'arroyo': arroyo_name, 
                                               'arroyo_num': arroyo_num,
                                               'dam': dam_name,
                                               'dam_num': picnum,
@@ -420,7 +404,7 @@ class PicMapper(object):
 
         all_data['arroyo_count'] = len(arroyos.keys())
         all_data['arroyos'] = arroyos
-        all_data['images'] = IMGMETA
+        all_data['images'] = IMG_META
         all_data['img_count'] = img_count
         all_data['img_count_geo'] = img_count_geo
         return all_data
@@ -437,7 +421,7 @@ class PicMapper(object):
             csvwriter.writerow(header)
             for relfname, imgdata in all_data[self.IMAGES_KEY].iteritems():
                 try:
-                    thumb_fname, width, height = thumb_data[relfname]
+                    thumb_fname, _, _ = thumb_data[relfname]
                 except:
                     thumb_fname = 'x'
                 rec = []
@@ -473,7 +457,7 @@ class PicMapper(object):
         img_info = ('<img src="{}" alt="picture" {} align="left" />'
                     .format(imgpth, dims))
         
-        lookat = la = skml.LookAt(gxaltitudemode=skml.GxAltitudeMode.relativetoseafloor,
+        lookat = skml.LookAt(gxaltitudemode=skml.GxAltitudeMode.relativetoseafloor,
                     latitude=dam[LAT_FLD], longitude=dam[LONG_FLD],
                     range=3000, heading=56, tilt=78)
         
@@ -556,15 +540,7 @@ class PicMapper(object):
         return thumb_data, pic_data
 
 # .............................................................................
-def getLogger(outpath):
-    LOG_FORMAT = ' '.join(["%(asctime)s",
-                       "%(threadName)s.%(module)s.%(funcName)s",
-                       "line",
-                       "%(lineno)d",
-                       "%(levelname)-8s",
-                       "%(message)s"])
-    LOG_DATE_FORMAT = '%d %b %Y %H:%M'
-    maxsize = 52000000
+def get_logger(outpath):
     level = logging.DEBUG
     
     # get log filename
@@ -579,7 +555,8 @@ def getLogger(outpath):
     log.setLevel(level)
     
     # add file handler
-    fileLogHandler = RotatingFileHandler(logfname, maxBytes=maxsize, backupCount=2)
+    fileLogHandler = RotatingFileHandler(
+        logfname, maxBytes=LOG_MAX, backupCount=2)
     fileLogHandler.setLevel(level)
     formatter = logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT)
     fileLogHandler.setFormatter(formatter)
@@ -608,7 +585,7 @@ def getBbox(bbox_str):
     return bbox
         
 # ...............................................
-def readyFilename(fullfilename, overwrite=True):
+def ready_filename(fullfilename, overwrite=True):
     if os.path.exists(fullfilename):
         if overwrite:
             try:
@@ -620,7 +597,7 @@ def readyFilename(fullfilename, overwrite=True):
         else:
             return False
     else:
-        pth, basename = os.path.split(fullfilename)
+        pth, _ = os.path.split(fullfilename)
         try:
             os.makedirs(pth)
         except:
@@ -632,7 +609,7 @@ def readyFilename(fullfilename, overwrite=True):
             raise Exception('Failed to create directories {}'.format(pth))
         
 # .............................................................................
-def getCSVReader(datafile, delimiter):
+def get_csv_reader(datafile, delimiter):
     try:
         f = open(datafile, 'r') 
         reader = csv.reader(f, delimiter=delimiter)        
@@ -642,7 +619,7 @@ def getCSVReader(datafile, delimiter):
     return reader, f
 
 # .............................................................................
-def getCSVWriter(datafile, delimiter, doAppend=True):
+def get_csv_writer(datafile, delimiter, doAppend=True):
     csv.field_size_limit(sys.maxsize)
     if doAppend:
         mode = 'ab'
@@ -667,7 +644,7 @@ def resize_image(infname, outfname, width, sample_method, quality, overwrite=Fal
     height = int((float(img.size[1]) * float(wpercent)))
     newsize = (width, height)
     
-    ready = readyFilename(outfname, overwrite=overwrite)
+    ready = ready_filename(outfname, overwrite=overwrite)
     if ready is True:
         img = img.resize(newsize, sample_method)
         img.save(outfname, 'JPEG', quality=quality, icc_profile=icc_profile)
@@ -680,27 +657,21 @@ def resize_image(infname, outfname, width, sample_method, quality, overwrite=Fal
 # .............................................................................
 # ...............................................
 if __name__ == '__main__':    
-    BASE_PATH='/Users/astewart/Home/Anaya/2019'
-    IN_DIR = 'orig'
-    OUT_DIR = 'out'
-    OUTNAME = 'dam_anaya'
-    THUMB_DIR = 'thumb'
-    THUMB_DIR_SM = 'small_thumb'
-    SAT_FNAME = 'satellite/op140814.tif'
-    
+    OUT_DIR = 'test_2020'
+
+    curr_path = BASE_PATH+'/2019'
     filteryear = None
-    
     dam_buffer = .0002
     thumb_width = 500
     thumb_width_sm = 200
     do_write = False
     
-#     log = getLogger(os.path.join(BASE_PATH, OUT_DIR))
+#     log = get_logger(os.path.join(BASE_PATH, OUT_DIR))
     log = None
-    image_path = os.path.join(BASE_PATH, IN_DIR)
-    thumb_path = os.path.join(BASE_PATH, OUT_DIR, THUMB_DIR)
-    thumb_path_sm = os.path.join(BASE_PATH, OUT_DIR, THUMB_DIR_SM)
-    out_fname_woext = os.path.join(BASE_PATH, OUT_DIR, OUTNAME)
+    image_path = os.path.join(curr_path, IN_DIR)
+    thumb_path = os.path.join(curr_path, OUT_DIR, THUMB_DIR)
+    thumb_path_sm = os.path.join(curr_path, OUT_DIR, THUMB_DIR_SMALL)
+    out_fname_woext = os.path.join(curr_path, OUT_DIR, OUTNAME)
     out_kml_fname = out_fname_woext + '.kml'
     out_csv_fname = out_fname_woext + '.csv'
     out_kmz_fname = out_fname_woext + '.kmz'

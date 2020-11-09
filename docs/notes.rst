@@ -40,5 +40,7 @@ Renamed some directories, files:
 * alldone202005030011 to alldone20200503_0011
 * alldone202005030021 to alldone20200503_0021
 * 62.AllDone to 65.AllDone (there is a 62.Kuma)
+* gerroyo20131024_dams20131024_0009 to gerroyo20131024_0009
+* gerroyo20131024_dams20131024_0010 to gerroyo20131024_0010
 
 

@@ -6,7 +6,7 @@ IMAGES_KEY = 'images'
 CSV_FIELDS = (
     'arroyo', 'arroyo_num', 'dam', 'dam_num', 'dam_date', 'img_date', 
     LONG_FLD, LAT_FLD, GEOM_WKT, 'xdirection', 'xdegrees', 'xminutes', 'xseconds',
-    'ydirection', 'ydegrees', 'yminutes', 'yseconds', 'fullpath')
+    'ydirection', 'ydegrees', 'yminutes', 'yseconds', 'in_bounds', 'fullpath')
 
 DELIMITER = '\t'
 ENCODING = 'utf-8'

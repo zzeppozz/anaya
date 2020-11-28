@@ -17,10 +17,9 @@ import simplekml as skml
 import time
 
 from constants import (
-    GEOM_WKT, LONG_FLD, LAT_FLD, DELIMITER, 
-    LOG_FORMAT, LOG_DATE_FORMAT, LOG_MAX,
-    BASE_PATH, IN_DIR, THUMB_DIR, THUMB_DIR_SMALL,
-    OUT_DIR, OUTNAME, SAT_FNAME, IMG_META)
+    GEOM_WKT, LONG_FLD, LAT_FLD, DELIMITER, LOG_FORMAT, LOG_DATE_FORMAT, 
+    LOG_MAX, BASE_PATH, IN_DIR, THUMB_DIR, THUMB_DIR_SMALL, OUT_DIR, OUT_NAME, 
+    SAT_FNAME, IMG_META)
 
 
 # .............................................................................
@@ -657,9 +656,8 @@ def resize_image(infname, outfname, width, sample_method, quality, overwrite=Fal
 # .............................................................................
 # ...............................................
 if __name__ == '__main__':    
-    OUT_DIR = 'test_2020'
 
-    curr_path = BASE_PATH+'/2019'
+    curr_path = BASE_PATH
     filteryear = None
     dam_buffer = .0002
     thumb_width = 500
@@ -671,7 +669,7 @@ if __name__ == '__main__':
     image_path = os.path.join(curr_path, IN_DIR)
     thumb_path = os.path.join(curr_path, OUT_DIR, THUMB_DIR)
     thumb_path_sm = os.path.join(curr_path, OUT_DIR, THUMB_DIR_SMALL)
-    out_fname_woext = os.path.join(curr_path, OUT_DIR, OUTNAME)
+    out_fname_woext = os.path.join(curr_path, OUT_DIR, OUT_NAME)
     out_kml_fname = out_fname_woext + '.kml'
     out_csv_fname = out_fname_woext + '.csv'
     out_kmz_fname = out_fname_woext + '.kmz'

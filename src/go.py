@@ -1,30 +1,17 @@
-p2_gdal_loc = '/Library/Frameworks/GDAL.framework/Versions/2.1/Python/2.7/site-packages'
-p2_pil_loc = '/Library/Python/2.7/site-packages/'
-
 import sys
-sys.path.insert(0, p2_gdal_loc)
-sys.path.insert(0, p2_pil_loc)
 
-import csv
-import exifread
+# p2_gdal_loc = '/Library/Frameworks/GDAL.framework/Versions/2.1/Python/2.7/site-packages'
+# p2_pil_loc = '/Library/Python/2.7/site-packages/'
+# sys.path.insert(0, p2_gdal_loc)
+# sys.path.insert(0, p2_pil_loc)
+
 import os
-from osgeo import ogr, osr
-import logging
-from logging.handlers import RotatingFileHandler
-from PIL import Image
 import time
 
-from constants import (
-    GEOM_WKT, LONG_FLD, LAT_FLD, IMG_META, DELIMITER, BASE_PATH, IN_DIR, 
-    ANC_DIR, THUMB_DIR, OUT_DIR, OUT_NAME, SAT_FNAME)
+from constants import (BASE_PATH, IN_DIR, THUMB_DIR, OUT_DIR, OUT_NAME)
 
-from georef import PicMapper, getBbox, getLogger, readyFilename, reduceImageSize
+from georef import PicMapper
 
-IN_PATH = '/Users/astewart/Home/anaya_pics/'
-THUMB_PATH = '/Users/astewart/Home/anaya_thumbs/'
-OUT_PATH = '/Users/astewart/Home/AnayaGE'
-OUTNAME = 'dam_anaya'
-SAT_IMAGE_FNAME = '/Users/astewart/Home/AnayaGE/satellite/op140814.tif'
 kml_flag = False
 shp_flag = False
 
@@ -52,12 +39,13 @@ sep = '_'
 
 pm = PicMapper(
     image_path, buffer_distance=dam_buffer, bbox=bbox, 
-    do_kml=kml_flag, do_shape=shp_flag)
+    shp_fname=shp_fname, kml_fname=None)
 
 
 
 # Read data
-imageData = pm.processAllImages(resize_width=500, resize_path=THUMB_PATH)
+imageData = pm.process_all_images(resize_width=500, resize_path=resize_path)
+
 print('Given: {} {} {} {}'.format(pm.bbox[0], pm.bbox[1], pm.bbox[2], pm.bbox[3]))
 print('Computed: '.format(pm._minX, pm._minY, pm._maxX, pm._maxY))
 

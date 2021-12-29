@@ -1,11 +1,17 @@
 # anaya
 Project to georeference Anaya Springs arroyos
 
-Dependencies:
+## Dependencies:
 
 For reading image metadata:
-* exifread
+* ExifRead
 
 For reducing image sizes
-* PIL
+* Pillow https://pillow.readthedocs.io/en/latest/handbook/index.html
 
+## Run
+
+georef.PicMapper contains all the functions to read metadata, 
+and read and rewrite image files. 
+
+go.py is a helper script to execute image file assessment and rewrite

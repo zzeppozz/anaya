@@ -1,7 +1,5 @@
 #!/Library/Frameworks/Python.framework/Versions/2.7/bin/python
 # Script dependency locations
-from _ast import Or
-from __builtin__ import False
 p2_gdal_loc = '/Library/Frameworks/GDAL.framework/Versions/2.1/Python/2.7/site-packages'
 p2_pil_loc = '/Library/Python/2.7/site-packages/'
 
@@ -28,7 +26,7 @@ from constants import (
 def standardize_name(fname, root=None, log=None):
     if root:
         _, arroyo = os.path.split(root)
-        arroyo_num, arroyo_name = arroyo.split('.')
+        arroyo_num, arroyo_name = arroyo.split(')')
 
     basename, ext = os.path.splitext(fname)
     for i in range(len(basename)):
@@ -39,15 +37,19 @@ def standardize_name(fname, root=None, log=None):
             pass
     name = basename[:i]
     rest = basename[i:]
-    parts = rest.split('_')            
-    try:
+    
+    parts = rest.split('_')
+    if len(parts) == 1:
+        date_str = parts[0][:8]
+        num_str = parts[0][8:]
+    elif len(parts) == 2:
         date_str, num_str = parts
-    except:
-        logit(log, '** Bad filename {}'.format(fname))
-        date_str = rest[:8]
-        num_str  = rest[8:]
-        newname = '{}{}_{}{}'.format(name, date_str, num_str, ext)
     else:
+        logit(log, '** Bad filename {}'.format(fname))
+        
+    try:
+        newname = '{}_{}_{}{}'.format(name, date_str, num_str, ext)
+    except:
         newname = fname
         
     picnum = int(num_str)
@@ -88,7 +90,7 @@ class PicMapper(object):
 # .............................................................................
     def __init__(
             self, image_path, buffer_distance=.0002, bbox=(-180, -90, 180, 90), 
-            logger=None):
+            shp_fname=None, kml_fname=None, logger=None):
         """
         @param image_path: Root path for image files to be processed
         @param image_buffer: Buffer in which images are considered to be the 
@@ -528,23 +530,24 @@ class PicMapper(object):
             self._log('Relative path parts {}'.format(parts))
           
         parts = basename.split('_')
-        try:
+        if len(parts) == 1:
+            ntmp = parts[0]
+            ctmp = None
+        elif len(parts) == 2:
             ntmp, ctmp = parts
-        except:
-            self._log('Bad filename {}'.format(relfname))
-        else:
             picnum = int(ctmp)
-            for i in range(len(ntmp)):
-                try:
-                    int(ntmp[i])
-                    break
-                except:
-                    pass
-            name = ntmp[:i]
-            dtmp = ntmp[i:]
-            yr = dtmp[:4]
-            mo = dtmp[4:6]
-            dy = dtmp[6:]
+            
+        for i in range(len(ntmp)):
+            if ntmp[i].isdigit():
+                break
+
+        name = ntmp[:i]
+        dtmp = ntmp[i:i+8]
+        if ctmp is None:
+            ctmp = ntmp[i+8:]
+        yr = dtmp[:4]
+        mo = dtmp[4:6]
+        dy = dtmp[6:]
         
         return arroyo_num, arroyo_name, name, [yr, mo, dy], picnum    
         
@@ -567,10 +570,14 @@ class PicMapper(object):
                     (_, name, picnum, (fyear, fmon, fday), 
                      (arroyo_num, arroyo_name)) = standardize_name(fname, root=root)
                         
-                    if not image_data.has_key(arroyo_name):
-                        image_data[arroyo_name] = {'num': arroyo_num}
-                    else:
+                    try:
                         image_data[arroyo_name]['num'] = arroyo_num
+                    except:
+                        image_data[arroyo_name] = {'num': arroyo_num}
+                    # if not image_data.has_key(arroyo_name):
+                    #     image_data[arroyo_name] = {'num': arroyo_num}
+                    # else:
+                    #     image_data[arroyo_name]['num'] = arroyo_num
                         
                     [yr, mo, day], dd, xdms, ydms = self.get_image_metadata(orig_fname)
                     if dd is None:
@@ -812,7 +819,7 @@ def logit(log, msg):
         print(msg)
         
 # .............................................................................
-def getBbox(bbox_str, log=None):
+def get_bbox(bbox_str, log=None):
     bbox = []
     parts = bbox_str.split(',')
     if len(parts) != 4:
@@ -920,7 +927,7 @@ def getCSVReader(datafile, delimiter):
     try:
         f = open(datafile, 'r') 
         reader = csv.reader(f, delimiter=delimiter)        
-    except Exception, e:
+    except Exception as e:
         raise Exception('Failed to read or open {}, ({})'
                         .format(datafile, str(e)))
     return reader, f
@@ -936,7 +943,7 @@ def getCSVWriter(datafile, delimiter, doAppend=True):
     try:
         f = open(datafile, mode) 
         writer = csv.writer(f, delimiter=delimiter)
-    except Exception, e:
+    except Exception as e:
         raise Exception('Failed to read or open {}, ({})'
                         .format(datafile, str(e)))
     return writer, f

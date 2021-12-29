@@ -11,7 +11,7 @@ CSV_FIELDS = (
 DELIMITER = '\t'
 ENCODING = 'utf-8'
 
-BASE_PATH='/Users/astewart/Home/Anaya/anaya_map'
+BASE_PATH='/Users/aimeestewart/Library/Mobile Documents/com~apple~CloudDocs/Documents/Home/Anaya/anaya_map'
 IN_DIR = 'dams'
 ANC_DIR = 'ancillary'
 OUT_DIR = 'output'
@@ -20,6 +20,7 @@ THUMB_DIR = 'thumb'
 THUMB_DIR_SMALL = 'small_thumb'
 SAT_FNAME = 'op140814.tif'
 RESIZE_WIDTH = 500
+SAT_IMAGE_FNAME = 'op140814.tif'
 
 LOG_FORMAT = ' '.join(["%(asctime)s",
                    "%(threadName)s.%(module)s.%(funcName)s",

@@ -3,11 +3,13 @@ Project to georeference Anaya Springs arroyos
 
 ## Dependencies:
 
-For reading image metadata:
-* ExifRead
+* OSGEO GDAL and OGR: Raster and Vector Geospatial functions
+  * Apt/RPM package must be installed on the base system, and python package must be 
+    installed in the default system python, then the virtual environment must inherit  
 
-For reducing image sizes
-* Pillow https://pillow.readthedocs.io/en/latest/handbook/index.html
+* ExifRead: reads image metadata
+
+* Pillow: Image processing, https://pillow.readthedocs.io/en/latest/handbook/index.html
 
 ## Run
 

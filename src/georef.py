@@ -1,11 +1,4 @@
-#!/Library/Frameworks/Python.framework/Versions/2.7/bin/python
-# Script dependency locations
-p2_gdal_loc = '/Library/Frameworks/GDAL.framework/Versions/2.1/Python/2.7/site-packages'
-p2_pil_loc = '/Library/Python/2.7/site-packages/'
-
 import sys
-sys.path.insert(0, p2_gdal_loc)
-sys.path.insert(0, p2_pil_loc)
 
 import csv
 import exifread

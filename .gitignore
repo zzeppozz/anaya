@@ -5,6 +5,9 @@ RPMS/x86_64
 # ignore eclipse files
 .pydevproject
 
+# ignore pycharm files
+.idea/
+
 # ignore python files
 python.mk
 *.pyc

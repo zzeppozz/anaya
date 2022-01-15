@@ -13,7 +13,8 @@ Project to georeference Anaya Springs arroyos
 
 ## Run
 
-georef.PicMapper contains all the functions to read metadata, 
+dam_process.dam_map.PicMapper contains all the functions to read metadata, 
 and read and rewrite image files. 
 
+tools.util contains helper functions for image proce
 go.py is a helper script to execute image file assessment and rewrite

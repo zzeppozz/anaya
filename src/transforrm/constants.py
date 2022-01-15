@@ -22,14 +22,6 @@ SAT_FNAME = 'op140814.tif'
 RESIZE_WIDTH = 500
 SAT_IMAGE_FNAME = 'op140814.tif'
 
-LOG_FORMAT = ' '.join(["%(asctime)s",
-                   "%(threadName)s.%(module)s.%(funcName)s",
-                   "line",
-                   "%(lineno)d",
-                   "%(levelname)-8s",
-                   "%(message)s"])
-LOG_DATE_FORMAT = '%d %b %Y %H:%M'
-LOG_MAX = 52000000
 
 # {'arroyo': arroyo_name, 
 #   'arroyo_num': arroyo_num,

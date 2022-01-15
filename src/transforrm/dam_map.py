@@ -1,56 +1,18 @@
-import sys
-
 import csv
 import exifread
-import glob
 import os
 from osgeo import ogr, osr
-import logging
-from logging.handlers import RotatingFileHandler
 from PIL import Image
 import time
 
-from constants import (
-    GEOM_WKT, LONG_FLD, LAT_FLD, IMG_META, DELIMITER, BASE_PATH, IN_DIR, 
-    ANC_DIR, THUMB_DIR, OUT_DIR, OUT_NAME, SAT_FNAME, LOG_MAX, LOG_FORMAT,
-    LOG_DATE_FORMAT, RESIZE_WIDTH, IMAGES_KEY, CSV_FIELDS)
+from src.tools.util import (get_csv_dict_reader, get_logger, logit, ready_filename, reduce_image_size)
+from src.transforrm.constants import (
+    GEOM_WKT, LONG_FLD, LAT_FLD, IMG_META, DELIMITER, BASE_PATH, IN_DIR, ANC_DIR,
+    THUMB_DIR, OUT_DIR, OUT_NAME, SAT_FNAME, RESIZE_WIDTH, IMAGES_KEY, CSV_FIELDS)
 
-# ...............................................
-def standardize_name(fname, root=None, log=None):
-    if root:
-        _, arroyo = os.path.split(root)
-        arroyo_num, arroyo_name = arroyo.split(')')
-
-    basename, ext = os.path.splitext(fname)
-    for i in range(len(basename)):
-        try:
-            int(basename[i])
-            break
-        except:
-            pass
-    name = basename[:i]
-    rest = basename[i:]
-    
-    parts = rest.split('_')
-    if len(parts) == 1:
-        date_str = parts[0][:8]
-        num_str = parts[0][8:]
-    elif len(parts) == 2:
-        date_str, num_str = parts
-    else:
-        logit(log, '** Bad filename {}'.format(fname))
-        
-    try:
-        newname = '{}_{}_{}{}'.format(name, date_str, num_str, ext)
-    except:
-        newname = fname
-        
-    picnum = int(num_str)
-    yr = int(date_str[:4])
-    mo = int(date_str[4:6])
-    dy = int(date_str[6:8])
-    
-    return newname, name, picnum, (yr, mo, dy), (arroyo_num, arroyo_name)
+RPAREN = ')'
+DELETE_CHARS = ['\'', ',', '"', ' ', '(', ')', '_']
+IMG_EXTS = ['jpg', 'jpeg', 'tiff', 'tif', 'rtif', 'rtiff']
 
 # .............................................................................
 class PicMapper(object):
@@ -85,23 +47,80 @@ class PicMapper(object):
             self, image_path, buffer_distance=.0002, bbox=(-180, -90, 180, 90), 
             shp_fname=None, kml_fname=None, logger=None):
         """
-        @param image_path: Root path for image files to be processed
-        @param image_buffer: Buffer in which images are considered to be the 
-               same location
-        @param bbox: Bounds of the output data, in (minX, minY, maxX, maxY) 
-               format.  Outside these bounds, images will be discarded
+        Args:
+            image_path: Root path for image files to be processed
+            buffer_distance: Buffer in which coordinates are considered to be the same location
+            bbox: Bounds of the output data, in (min_x, min_y, max_x, max_y) format.  Outside these
+                bounds, images will be discarded
         """
         self.base_path, _ = os.path.split(image_path)
         self.image_path = image_path
         self.buffer_distance = buffer_distance
         self.bbox = bbox
         # Compute actual bounds of the data
-        self._minX = bbox[0]
-        self._minY = bbox[1]
-        self._maxX = bbox[2]
-        self._maxY = bbox[3]
-        self._logger = logger
-    
+        self._min_x = bbox[0]
+        self._min_y = bbox[1]
+        self._max_x = bbox[2]
+        self._max_y = bbox[3]
+        self._logger = get_logger(os.path.join(BASE_PATH, OUT_DIR))
+
+    # ...............................................
+    def _clean_name(self, name):
+        """Remove non-ascii and other special characters; replace first right paren with underscore"""
+        tmpchars = []
+        idx = name.index(RPAREN)
+        tmp_name = name[0:idx] + '_' + name[idx+1:]
+        for ch in tmp_name:
+            if ch.isascii() and ch not in DELETE_CHARS:
+                tmpchars.append(ch)
+        new_name = ''.join(tmpchars)
+        return new_name
+
+    # ...............................................
+    def _standardize_name(self, filename, fullpath):
+        date_str = num_str = '?'
+        _, arroyo_dir = os.path.split(fullpath)
+        new_arroyo_dir = self._clean_name(arroyo_dir)
+        arroyo_num, arroyo_name = new_arroyo_dir.split('_')
+
+        # Fix missing extensions manually
+        basename, ext = os.path.splitext(filename)
+        if ext == '':
+            logit(self._logger, 'Missing extension in {}, dir {}'.format(filename, fullpath))
+            ext = '.JPG'
+
+        # Find first number in filename, indicating start of date/time string
+        for i in range(len(basename)):
+            try:
+                int(basename[i])
+                break
+            except:
+                pass
+        name = basename[:i]
+        rest = basename[i:]
+        new_name = self._clean_name(name)
+        # Date time parts split by underscore
+        parts = rest.split('_')
+        if len(parts) == 2:
+            date_str, num_str = parts
+        # or not
+        elif len(parts) == 1:
+            date_str = parts[0][:8]
+            num_str = parts[0][8:]
+        else:
+            logit(self._logger, '** Bad filename {}'.format(filename))
+
+        try:
+            new_filename = '{}_{}_{}{}'.format(new_name, date_str, num_str, ext)
+        except:
+            new_filename = filename
+
+        picnum = int(num_str)
+        yr = int(date_str[:4])
+        mo = int(date_str[4:6])
+        dy = int(date_str[6:8])
+
+        return new_filename, name, picnum, (yr, mo, dy), (arroyo_num, arroyo_name)
     # ...............................................
     def _get_date(self, tags):
         # Get date
@@ -154,11 +173,11 @@ class PicMapper(object):
         """
         @todo: gather bounds from images
         """
-        (minX, minY, maxX, maxY) = self.bbox
+        (min_x, min_y, max_x, max_y) = self.bbox
         if os.path.exists(fname):
             os.remove(fname)
         foldername, _ = os.path.splitext(os.path.basename(fname))
-        rel_satellite_fname = os.path.join('..', ANC_DIR, SAT_FNAME)
+        rel_satellite_fname = os.path.join('../..', ANC_DIR, SAT_FNAME)
         f = open(fname, 'w')
         f.write('<?xml version="1.0" encoding="utf-8" ?>\n')
         f.write('<kml xmlns="http://www.opengis.net/kml/2.2">\n')
@@ -169,10 +188,10 @@ class PicMapper(object):
         f.write('      <description>Local imagery</description>\n')
         f.write('      <Icon><href>{}</href></Icon>\n'.format(rel_satellite_fname))
         f.write('      <LatLonBox>\n')
-        f.write('         <north>{}</north>\n'.format(maxY))
-        f.write('         <south>{}</south>\n'.format(minY))
-        f.write('         <east>{}</east>\n'.format(maxX))
-        f.write('         <west>{}</west>\n'.format(minX))
+        f.write('         <north>{}</north>\n'.format(max_y))
+        f.write('         <south>{}</south>\n'.format(min_y))
+        f.write('         <east>{}</east>\n'.format(max_x))
+        f.write('         <west>{}</west>\n'.format(min_x))
         f.write('         <rotation>-0.1556640799496235</rotation>\n')
         f.write('      </LatLonBox>\n')
         f.write('   </GroundOverlay>\n')
@@ -211,17 +230,17 @@ class PicMapper(object):
     
     def _good_geo(self, damdata):
         good_geo = False
-        # (minX, minY, maxX, maxY)
+        # (min_x, min_y, max_x, max_y)
         xdd = float(damdata[LONG_FLD])
         ydd = float(damdata[LAT_FLD])
         if xdd < self.bbox[0]:
-            self._log('X value {} < min {}'.format(xdd, self.bbox[0]))
+            self._logger('X value {} < min {}'.format(xdd, self.bbox[0]))
         elif xdd > self.bbox[2]:
-            self._log('X value {} > max {}'.format(xdd, self.bbox[2]))
+            self._logger('X value {} > max {}'.format(xdd, self.bbox[2]))
         elif ydd < self.bbox[1]:
-            self._log('Y value {} < min {}'.format(ydd, self.bbox[1]))
+            self._logger('Y value {} < min {}'.format(ydd, self.bbox[1]))
         elif ydd > self.bbox[3]:
-            self._log('Y value {} > max {}'.format(ydd, self.bbox[3]))
+            self._logger('Y value {} > max {}'.format(ydd, self.bbox[3]))
         else:
             good_geo = True
         return good_geo
@@ -231,6 +250,7 @@ class PicMapper(object):
         if damdata['in_bounds'] is False:
             pass
         else:
+            yr = mo = day = '0'
             try:
                 [yr, mo, day] = damdata['img_date']
             except:
@@ -257,7 +277,7 @@ class PicMapper(object):
                 geom = ogr.CreateGeometryFromWkt(wkt)
                 feat.SetGeometryDirectly(geom)
             except Exception as e:
-                self._log('Failed to fillOGRFeature, e = {}'.format(e))
+                self._logger('Failed to fillOGRFeature, e = {}'.format(e))
             else:
                 # Create new feature, setting FID, in this layer
                 lyr.CreateFeature(feat)
@@ -337,7 +357,7 @@ class PicMapper(object):
                 ydd = damdata[LAT_FLD]
                 arroyo = damdata['arroyo']
             except Exception as e:
-                self._log('Failed reading data {}'.format(e))
+                self._logger('Failed reading data {}'.format(e))
             else:
                 _, basefname = os.path.split(rel_thumbfname)
                 basename, _ = os.path.splitext(basefname)
@@ -369,7 +389,7 @@ class PicMapper(object):
             dx = abs(abs(x) - abs(currx))
             dy = abs(abs(y) - abs(curry))
             if dx < self.buffer_distance or dy < self.buffer_distance:
-                self._log('Current file {} is within buffer of {} (dx = {}, dy = {})'
+                self._logger('Current file {} is within buffer of {} (dx = {}, dy = {})'
                           .format(currfname, fname, dx, dy))
                 break
         all_coords[currfname] = (currx, curry)
@@ -384,9 +404,8 @@ class PicMapper(object):
             # Reduce image
             thumbfname = os.path.join(thumb_path, relfname)
             reduce_image_size(
-                fullfname, thumbfname, width=RESIZE_WIDTH, 
-                sample_method=Image.ANTIALIAS, overwrite=overwrite, 
-                log=self._logger)
+                fullfname, thumbfname, RESIZE_WIDTH, Image.ANTIALIAS,
+                overwrite=overwrite, log=self._logger)
             # Why?
             has_geo = damdata[GEOM_WKT].startswith('Point')
             if has_geo:
@@ -395,98 +414,103 @@ class PicMapper(object):
             
             
     # ...............................................
-    def create_shapefile_kml(
-            self, shpfname, kmlfname, img_data, 
-            do_shape=True, do_kml=True):
-#         thumb_path = os.path.join(out_path, THUMB_DIR)
-#         rel_idx = len(thumb_path)
-        if do_kml:
+    def create_shapefile_kml(self, shpfname, kmlfname, img_data):
+        kmlf = dataset = lyr = None
+        # Open one or both
+        if kmlfname is not None:
             ready_filename(kml_fname)
             kmlf = self._open_kml_file(kmlfname)
-        if do_shape:
+        if shpfname is not None:
             ready_filename(shpfname)
             dataset, lyr = self._create_layer(self.FIELDS, shpfname)
 
+        # Iterate through features one time writing elements to each requested file
         for relfname, damdata in img_data.iteritems():
             if damdata['in_bounds'] is True:
                 rel_thumbfname = os.path.join(THUMB_DIR, relfname)
-                if do_kml:
+                if kmlf:
                     self._create_lookat_kml(kmlf, rel_thumbfname, damdata)
-                if do_shape:
+                if dataset and lyr:
                     self._create_feat_shp(lyr, rel_thumbfname, damdata)
-            
-        if do_kml:
+
+        # Close open files
+        if kmlf:
             self._close_kml_file(kmlf)
-        if do_shape:
+        if dataset:
             dataset.Destroy()
-            self._log('Closed/wrote dataset {}'.format(shpfname))
+            self._logger('Closed/wrote dataset {}'.format(shpfname))
     
     
     # ...............................................
     def get_image_metadata(self, fullname):
-        dd = xdms = ydms = yr = mo = day = None
+        tags = dd = xdms = ydms = yr = mo = day = None
+        # Read image metadata
         try:
-            # Open image file for reading (binary mode)
+            # Open file in binary mode
             f = open(fullname, 'rb')
             # Get Exif tags
             tags = exifread.process_file(f)
         except Exception as e:
-            self._log('{}: Unable to read image metadata, {}'.format(
+            self._logger('{}: Unable to read image metadata, {}'.format(
                 fullname, e))
         finally:
-            f.close()
-        try:
-            dd, xdms, ydms = self._get_dd(tags)
-        except Exception as e:
-            self._log('{}: Unable to get x y, {}'.format(fullname, e))
-        try:
-            yr, mo, day = self._get_date(tags)
-        except Exception as e:
-            self._log('{}: Unable to get date, {}'.format(fullname, e))
+            try:
+                f.close()
+            except:
+                pass
+        # Parse image metadata
+        if tags:
+            try:
+                dd, xdms, ydms = self._get_dd(tags)
+            except Exception as e:
+                self._logger('{}: Unable to get x y, {}'.format(fullname, e))
+            try:
+                yr, mo, day = self._get_date(tags)
+            except Exception as e:
+                self._logger('{}: Unable to get date, {}'.format(fullname, e))
         return (yr, mo, day), dd, xdms, ydms
     
     # ...............................................
-    def eval_extent(self, dd):
-        (x, y) = dd
+    def eval_extent(self, x: float, y: float) -> bool:
         in_bounds = True
-        # in assigned bbox (minx, miny, maxx, maxy)?
+        # in assigned bbox (min_x, min_y, max_x, max_y)?
         if (x < self.bbox[0] or 
             x > self.bbox[2] or 
             y < self.bbox[1] or 
             y > self.bbox[3]):
             in_bounds = False
             
-        if x < self._minX:
-            self._minX = dd[0]
-        if x > self._maxX:
-            self._maxX = x
+        if x < self._min_x:
+            self._min_x = x
+        if x > self._max_x:
+            self._max_x = x
             
-        if y < self._minY:
-            self._minY = y
-        if y > self._maxY:
-            self._maxY = y
+        if y < self._min_y:
+            self._min_y = y
+        if y > self._max_y:
+            self._max_y = y
 
-        if self._minX is None:
-            self._minX = x
-            self._maxX = x
-            self._minY = y
-            self._maxY = y
+        if self._min_x is None:
+            self._min_x = x
+            self._max_x = x
+            self._min_y = y
+            self._max_y = y
         else:
-            if x < self._minX:
-                self._minX = x
-            if x > self._maxX:
-                self._maxX = x
+            if x < self._min_x:
+                self._min_x = x
+            if x > self._max_x:
+                self._max_x = x
                 
-            if y < self._minY:
-                self._minY = y
-            if y > self._maxY:
-                self._maxY = y
+            if y < self._min_y:
+                self._min_y = y
+            if y > self._max_y:
+                self._max_y = y
         return in_bounds
     
     # ...............................................
     @property
     def extent(self):
-        return (self._minX, self._minY, self._maxX, self._maxY)
+        return (self._min_x, self._min_y, self._max_x, self._max_y)
 
     # ...............................................
     def parse_filename(self, root, fname):
@@ -512,37 +536,37 @@ class PicMapper(object):
         picnum = int(count)
         return arroyo_num, arroyo_name, name, year, picnum    
         
-    # ...............................................
-    def parse_relfname(self, relfname):
-        parts = relfname.split(os.sep)
-        arroyo = parts[0]
-        arroyo_num, arroyo_name = arroyo.split('.')
-        basename, _ = os.path.splitext(parts[-1])
-        
-        if len(parts) != 2:
-            self._log('Relative path parts {}'.format(parts))
-          
-        parts = basename.split('_')
-        if len(parts) == 1:
-            ntmp = parts[0]
-            ctmp = None
-        elif len(parts) == 2:
-            ntmp, ctmp = parts
-            picnum = int(ctmp)
-            
-        for i in range(len(ntmp)):
-            if ntmp[i].isdigit():
-                break
-
-        name = ntmp[:i]
-        dtmp = ntmp[i:i+8]
-        if ctmp is None:
-            ctmp = ntmp[i+8:]
-        yr = dtmp[:4]
-        mo = dtmp[4:6]
-        dy = dtmp[6:]
-        
-        return arroyo_num, arroyo_name, name, [yr, mo, dy], picnum    
+    # # ...............................................
+    # def parse_relfname(self, relfname):
+    #     parts = relfname.split(os.sep)
+    #     arroyo = parts[0]
+    #     arroyo_num, arroyo_name = arroyo.split('.')
+    #     basename, _ = os.path.splitext(parts[-1])
+    #
+    #     if len(parts) != 2:
+    #         self._logger('Relative path parts {}'.format(parts))
+    #
+    #     parts = basename.split('_')
+    #     if len(parts) == 1:
+    #         ntmp = parts[0]
+    #         ctmp = None
+    #     elif len(parts) == 2:
+    #         ntmp, ctmp = parts
+    #         picnum = int(ctmp)
+    #
+    #     for i in range(len(ntmp)):
+    #         if ntmp[i].isdigit():
+    #             break
+    #
+    #     name = ntmp[:i]
+    #     dtmp = ntmp[i:i+8]
+    #     if ctmp is None:
+    #         ctmp = ntmp[i+8:]
+    #     yr = dtmp[:4]
+    #     mo = dtmp[4:6]
+    #     dy = dtmp[6:]
+    #
+    #     return arroyo_num, arroyo_name, name, [yr, mo, dy], picnum
         
     # ...............................................
     def process_all_images(self, resize_width=RESIZE_WIDTH, resize_path=None):
@@ -561,7 +585,7 @@ class PicMapper(object):
                     orig_fname = os.path.join(root, fname)
                     
                     (_, name, picnum, (fyear, fmon, fday), 
-                     (arroyo_num, arroyo_name)) = standardize_name(fname, root=root)
+                     (arroyo_num, arroyo_name)) = self._standardize_name(fname, root)
                         
                     try:
                         image_data[arroyo_name]['num'] = arroyo_num
@@ -576,7 +600,7 @@ class PicMapper(object):
                     if dd is None:
                         return {}
                     
-                    in_bounds = self.eval_extent(dd)
+                    in_bounds = self.eval_extent(dd[0], dd[1])
                     if resize_path is not None:
                         # includes trailing /
                         rel_fname = orig_fname[len(self.image_path):]
@@ -634,7 +658,7 @@ class PicMapper(object):
                 except:
                     arroyos[arroyo_name] = [relfname]
         except Exception as e:
-            self._log('Failed to read image metadata from {}, line {}, {}'.format(
+            self._logger('Failed to read image metadata from {}, line {}, {}'.format(
                 csv_fname, drdr.line_num, e))
         finally:
             f.close()
@@ -670,10 +694,10 @@ class PicMapper(object):
                     relfname = fullfname[len(self.image_path)+1:]
                     xdeg = xmin = xsec = xdir = ydeg = ymin = ysec = ydir = ''
                     lon = lat = wkt = ''
-                    self._log('Reading {} ...'.format(fullfname))
+                    self._logger('Reading {} ...'.format(fullfname))
     
                     _, dam_name, picnum, dam_date, (arroyo_num, arroyo_name) = \
-                        standardize_name(fname, root=root)
+                        self._standardize_name(fname, root)
                     img_date, xydd, xdms, ydms = self.get_image_metadata(fullfname)
                     
                     if xdms is not None:
@@ -682,13 +706,13 @@ class PicMapper(object):
                         (ydeg, ymin, ysec, ydir) = ydms
                     if xydd is None:
                         in_bounds = False
-                        self._log('Failed to return decimal degrees for {}'.format(relfname))
+                        self._logger('Failed to return decimal degrees for {}'.format(relfname))
                     else:
                         lon = xydd[0]
                         lat = xydd[1]
                         wkt = 'Point ({:.7f}  {:.7f})'.format(lon, lat)
                         img_count_geo += 1
-                        in_bounds = self.eval_extent(xydd)
+                        in_bounds = self.eval_extent(lon, lat)
                                 
                     img_meta[relfname] = {'arroyo': arroyo_name, 
                                           'arroyo_num': arroyo_num,
@@ -713,7 +737,7 @@ class PicMapper(object):
                         arroyos[arroyo_name].append(relfname)
                     except:
                         arroyos[arroyo_name] = [relfname]
-#                     self._log('  Read {}'.format(fullfname))
+#                     self._logger('  Read {}'.format(fullfname))
 
         all_data['arroyo_count'] = len(arroyos.keys())
         all_data['arroyos'] = arroyos
@@ -754,7 +778,7 @@ class PicMapper(object):
                     orig_fname = os.path.join(root, fname)
                     
                     (_, name, picnum, [fname_yr, fname_mo, fname_day], 
-                     (arroyo_num, arroyo_name)) = standardize_name(fname, root=root)
+                     (arroyo_num, arroyo_name)) = self._standardize_name(fname, root)
                     if not image_data.has_key(arroyo_name):
                         image_data[arroyo_name] = {'num': arroyo_num}
                     else:
@@ -764,7 +788,7 @@ class PicMapper(object):
                     if dd is None:
                         return {}
                     
-                    self.eval_extent(dd)
+                    self.eval_extent(dd[0], dd[1])
                     if resize_path is not None:
                         # includes trailing /
                         rel_fname = orig_fname[len(self.image_path):]
@@ -780,238 +804,22 @@ class PicMapper(object):
                         
         return image_data
 
-# .............................................................................
-def get_logger(outpath):
-    level = logging.DEBUG
-    
-    # get log filename
-    scriptname, _ = os.path.splitext(os.path.basename(__file__))
-    secs = time.time()
-    timestamp = "{}".format(time.strftime("%Y%m%d-%H%M", time.localtime(secs)))
-    logname = '{}.{}'.format(scriptname, timestamp)
-    logfname = os.path.join(outpath, logname + '.log')
-    
-    # get logger
-    log = logging.getLogger(logname)
-    log.setLevel(level)
-    
-    # add file handler
-    fileLogHandler = RotatingFileHandler(logfname, maxBytes=LOG_MAX, backupCount=2)
-    fileLogHandler.setLevel(level)
-    formatter = logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT)
-    fileLogHandler.setFormatter(formatter)
-    log.addHandler(fileLogHandler)
-    
-    return log
-
-# .............................................................................
-def logit(log, msg):
-    if log:
-        log.warn(msg)
-    else:
-        print(msg)
-        
-# .............................................................................
-def get_bbox(bbox_str, log=None):
-    bbox = []
-    parts = bbox_str.split(',')
-    if len(parts) != 4:
-        logit(log, 'Failed to get 4 values for bbox from {}'.format(bbox_str))
-    else:
-        for i in range(len(parts)):
-            pt = parts[i].strip()
-            tmp = pt.rstrip(')').lstrip('(')
-            try:
-                val = float(tmp)
-            except: 
-                logit(log, 'Failed to parse element {} from {} into float value'
-                      .format(i, bbox_str))
-            else:
-                bbox.append(val)
-    return bbox
-        
-# ...............................................
-def ready_filename(fullfilename, overwrite=True):
-    if os.path.exists(fullfilename):
-        if overwrite:
-            try:
-                delete_file(fullfilename)
-            except Exception as e:
-                raise Exception('Unable to delete {} ({})'.format(fullfilename, e))
-            else:
-                return True
-        else:
-            return False
-    else:
-        pth, _ = os.path.split(fullfilename)
-        try:
-            os.makedirs(pth)
-        except:
-            pass
-            
-        if os.path.isdir(pth):
-            return True
-        else:
-            raise Exception('Failed to create directories {}'.format(pth))
-        
-# ...............................................
-def delete_file(file_name, delete_dir=False):
-    """Delete file if it exists, delete directory if it becomes empty
-
-    Note:
-        If file is shapefile, delete all related files
-    """
-    shp_extensions=[
-        '.shp', '.shx', '.dbf', '.prj', '.sbn', '.sbx', '.fbn', '.fbx', '.ain', 
-        '.aih', '.ixs', '.mxs', '.atx', '.shp.xml', '.cpg', '.qix']
-    success = True
-    msg = ''
-    if file_name is None:
-        msg = 'Cannot delete file \'None\''
-    else:
-        pth, _ = os.path.split(file_name)
-        if file_name is not None and os.path.exists(file_name):
-            base, ext = os.path.splitext(file_name)
-            if ext == '.shp':
-                similar_file_names = glob.glob(base + '.*')
-                try:
-                    for sim_file_name in similar_file_names:
-                        _, sim_ext = os.path.splitext(sim_file_name)
-                        if sim_ext in shp_extensions:
-                            os.remove(sim_file_name)
-                except Exception as e:
-                    success = False
-                    msg = 'Failed to remove {}, {}'.format(
-                        sim_file_name, str(e))
-            else:
-                try:
-                    os.remove(file_name)
-                except Exception as e:
-                    success = False
-                    msg = 'Failed to remove {}, {}'.format(file_name, str(e))
-            if delete_dir and len(os.listdir(pth)) == 0:
-                try:
-                    os.removedirs(pth)
-                except Exception as e:
-                    success = False
-                    msg = 'Failed to remove {}, {}'.format(pth, str(e))
-    return success, msg
-
-# .............................................................................
-def get_csv_dict_reader(datafile, delimiter, fieldnames=None, log=None):
-    try:
-        f = open(datafile, 'r')
-        if fieldnames is None:
-            header = next(f)
-            tmpflds = header.split(delimiter)
-            fieldnames = [fld.strip() for fld in tmpflds]
-        dreader = csv.DictReader(
-                f, fieldnames=fieldnames, delimiter=delimiter)
-            
-    except Exception as e:
-        raise Exception('Failed to read or open {}, ({})'
-                        .format(datafile, str(e)))
-    else:
-        logit(log, 'Opened file {} for dict read'.format(datafile))
-    return dreader, f
-
-# .............................................................................
-def getCSVReader(datafile, delimiter):
-    try:
-        f = open(datafile, 'r') 
-        reader = csv.reader(f, delimiter=delimiter)        
-    except Exception as e:
-        raise Exception('Failed to read or open {}, ({})'
-                        .format(datafile, str(e)))
-    return reader, f
-
-# .............................................................................
-def getCSVWriter(datafile, delimiter, doAppend=True):
-    csv.field_size_limit(sys.maxsize)
-    if doAppend:
-        mode = 'ab'
-    else:
-        mode = 'wb'
-       
-    try:
-        f = open(datafile, mode) 
-        writer = csv.writer(f, delimiter=delimiter)
-    except Exception as e:
-        raise Exception('Failed to read or open {}, ({})'
-                        .format(datafile, str(e)))
-    return writer, f
-
-
-# ...............................................
-def reduce_image_size(
-        infname, outfname, width=RESIZE_WIDTH, sample_method=Image.ANTIALIAS,
-        overwrite=True, log=None):
-    if ready_filename(outfname, overwrite=overwrite):
-        img = Image.open(infname)
-        wpercent = (width / float(img.size[0]))
-        height = int((float(img.size[1]) * float(wpercent)))
-        size = (width, height)
-        img = img.resize(size, sample_method)
-        img.save(outfname)
-        logit(log, 'Rewrote image {} to {}'.format(infname, outfname))
-        
-
-# ...............................................
-def _replace_chars(oldname):
-    newname = oldname
-    if newname.find(" "):
-        newname = newname.replace(" ", "")
-    if newname.find("'"):
-        newname = newname.replace("'", "")
-    if newname.find(")"):
-        newname = newname.replace(")", ".")
-    return newname
-
-# ...............................................
-def fix_dirnames(fullpath, log=None):
-    for root, dirs, _ in os.walk(fullpath):
-        for oldname in dirs:
-            newname = _replace_chars(oldname)
-            if newname != oldname:
-                oldpath = os.path.join(root, oldname)
-                newpath = os.path.join(root, newname)
-                retval = os.rename(oldpath, newpath)
-                logit(log, 'Rename {} - {} to {}'.format(retval, oldpath, newpath))
-
-# ...............................................
-def fix_filenames(fullpath, log=None):
-    total = renamed = 0
-    for root, _, files in os.walk(fullpath):
-        for old_fname in files:
-            if old_fname.lower().endswith('jpg'):
-                total += 1
-                new_fname = _replace_chars(old_fname)
-                (new_fname, name, picnum, yrmody) = standardize_name(
-                    new_fname, log=log)
-                if new_fname != old_fname:
-                    renamed += 1
-                    old_fullname = os.path.join(root, old_fname)
-                    new_fullname = os.path.join(root, new_fname)
-                    _ = os.rename(old_fullname, new_fullname)
-                    logit(log, 'Rename {} to {}'.format(old_fname, new_fname))
-    logit(log, 'Renamed {} of {} files'.format(renamed, total))
 
 # .............................................................................
 # .............................................................................
 # ...............................................
 if __name__ == '__main__':    
-#     maxY = 35.45045
-#     minY = 35.43479
-#     maxX = -106.05353
-#     minX = -106.07259    
-    maxY = 35.45
-    minY = 35.42
-    maxX = -106.04
-    minX = -106.08
+#     max_y = 35.45045
+#     min_y = 35.43479
+#     max_x = -106.05353
+#     min_x = -106.07259    
+    max_y = 35.45
+    min_y = 35.42
+    max_x = -106.04
+    min_x = -106.08
     
     dam_buffer = .00002
     
-    log = get_logger(os.path.join(BASE_PATH, OUT_DIR))
     image_path = os.path.join(BASE_PATH, IN_DIR)
     out_path = os.path.join(BASE_PATH, OUT_DIR)
     resize_path= os.path.join(out_path, THUMB_DIR)
@@ -1019,20 +827,19 @@ if __name__ == '__main__':
     base_outfile = os.path.join(out_path, OUT_NAME)
     csv_fname = '{}.csv'.format(base_outfile)
     shp_fname = '{}.shp'.format(base_outfile)
-    kml_fname = '{}.kml'.format(base_outfile)
+    kml_fname = None  #'{}.kml'.format(base_outfile)
 
-    bbox = (minX, minY, maxX, maxY)
+    bbox = (min_x, min_y, max_x, max_y)
     
-    pm = PicMapper(
-        image_path, buffer_distance=dam_buffer, bbox=bbox, logger=log)
+    pm = PicMapper(image_path, buffer_distance=dam_buffer, bbox=bbox)
       
     # Read data
     if os.path.exists(csv_fname):
         all_data = pm.read_csv_metadata(csv_fname)
     else:
         all_data = pm.read_image_data()
-        logit(log, 'Given: {} {} {} {}'.format(pm.bbox[0], pm.bbox[1], pm.bbox[2], pm.bbox[3]))
-        logit(log, 'Computed: {}'.format(pm.extent))
+        logit(pm._logger, 'Given: {} {} {} {}'.format(pm.bbox[0], pm.bbox[1], pm.bbox[2], pm.bbox[3]))
+        logit(pm._logger, 'Computed: {}'.format(pm.extent))
         pm.write_csv_data(csv_fname, all_data[IMAGES_KEY])
   
     img_data = all_data[IMAGES_KEY]
@@ -1043,8 +850,7 @@ if __name__ == '__main__':
     # Write smaller images
     all_coords = pm.create_thumbnails(out_path, img_data, overwrite=False)
     # Write data
-    pm.create_shapefile_kml(
-        shp_fname, kml_fname, img_data, do_shape=True, do_kml=True)
+    pm.create_shapefile_kml(shp_fname, kml_fname, img_data)
       
 
 

@@ -1,31 +1,28 @@
-Developer Notes
-===============
+# Developer Notes
 
 
-Dependencies
-------------
-* python2.7 
+
+## Dependencies
+* python3.6+ 
 * osgeo GDAL and OGR
 * PIL/Pillow
 
-Directory pattern
------------------
-* Anaya/anaya_map
+## Directory pattern
+* anaya/data
 
   * dam_anaya.* - output files
   * ancillary - dir of reference files
   
-    * op140814.tif - satellite imagery
+    * satellite
+      * op140814.tif - satellite imagery
     * dem.*
     * flowline.*
     * topo.*
     * USGS - dir of drainage shapefiles
     
-  * dams - input images
-  * 
+* External directory for input images - anaya/dams
   
-Projection
------------
+## Projection
 
 * NAD 1983 StatePlane New Mexico Central FIPS 3002 Feet::
  
@@ -50,23 +47,16 @@ Projection
     AUTHORITY["EPSG","102713"]]
     
     
-Input name patterns
--------------------
+## Input name patterns
 
-Renamed all dam directories and filenames:
-
+Renamed all dam directories:
 * Removed spaces
-* Removed apostrophes
-* Replaced ')' with '.'
+* Removed non-alpha characters and non-digits
+* Replaced first ')' with '_'
 
+Renamed files:
+* Make sure extension is separated from basename
+* Separate basename into name_yyyy-mm-dd_num
 
-Renamed some directories, files:
-
-* bend20131020_dams20131020new_0015 to bend20131020_0015
-* alldone202005030011 to alldone20200503_0011
-* alldone202005030021 to alldone20200503_0021
-* 62.AllDone to 65.AllDone (there is a 62.Kuma)
-* gerroyo20131024_dams20131024_0009 to gerroyo20131024_0009
-* gerroyo20131024_dams20131024_0010 to gerroyo20131024_0010
 
 

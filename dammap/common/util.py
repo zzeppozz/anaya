@@ -1,4 +1,4 @@
-# File handling, name conversion, bounding box parsing, Image processing tools for anaya project
+# File handling, name conversion, bounding box parsing, Image processing common for anaya project
 import csv
 import glob
 import logging
@@ -9,13 +9,14 @@ import sys
 import time
 
 LOG_FORMAT = ' '.join(["%(asctime)s",
-                   "%(threadName)s.%(module)s.%(funcName)s",
-                   "line",
-                   "%(lineno)d",
-                   "%(levelname)-8s",
-                   "%(message)s"])
+                       "%(threadName)s.%(module)s.%(funcName)s",
+                       "line",
+                       "%(lineno)d",
+                       "%(levelname)-8s",
+                       "%(message)s"])
 LOG_DATE_FORMAT = '%d %b %Y %H:%M'
 LOG_MAX = 52000000
+
 
 # .............................................................................
 def get_logger(outpath):
@@ -37,12 +38,69 @@ def get_logger(outpath):
     log.addHandler(file_log_handler)
     return log
 
+def fix_name(name):
+    """Modify name to consistent pattern.
+
+     Exclude special characters, apostrophes, and parentheses and correct extensions
+
+     Args:
+        name: input string for correction
+
+    Returns:
+        string that is the modified name
+    """
+    newchars = []
+    found_paren = False
+    for i in range(0, len(name)):
+        ch = name[i]
+        # Skip spaces, non-ascii, single quote characters
+        if ch.isascii() and ch not in (" ", "'"):
+            if ch.isalnum() or ch == "_":
+                newchars.append(ch)
+            # Replace first ) with _, remove any others
+            elif ch == ")":
+                if not found_paren:
+                    found_paren = True
+                    newchars.append("_")
+    return ''.join(newchars)
+
+# .............................................................................
+def fix_names_in_tree(inpath, do_files=False):
+    """Fix names in a tree, either directories or files.
+
+    Args:
+        inpath (str): base directory
+        do_files (bool): False if rename directories, True if rename files
+    """
+    for root, dirlist, files in os.walk(inpath):
+        count = 0
+        for olddir in dirlist:
+            # Fix filenames
+            if not do_files:
+                newdir = fix_name(olddir)
+                # os.rename(os.path.join(root, olddir), os.path.join(root, newdir))
+                print("{} --> {}".format(olddir, newdir))
+        for fname in files:
+
+            if do_files:
+                if not fname.startswith("."):
+                    basename, ext = os.path.splitext(fname)
+                    newname = fix_name(basename)
+                    old_filename = os.path.join(root, fname)
+                    new_filename = os.path.join(root, newname + ext)
+                    # os.rename(old_filename, new_filename)
+                    print("{} --> {}".format(basename, newname))
+            count += 1
+        if count > 30:
+            break
+
 # .............................................................................
 def logit(log, msg):
     if log:
         log.warn(msg)
     else:
         print(msg)
+
 
 # .............................................................................
 def get_bbox(bbox_str, log=None):
@@ -62,6 +120,7 @@ def get_bbox(bbox_str, log=None):
             else:
                 bbox.append(val)
     return bbox
+
 
 # ...............................................
 def ready_filename(fullfilename, overwrite=True):
@@ -86,6 +145,7 @@ def ready_filename(fullfilename, overwrite=True):
             return True
         else:
             raise Exception('Failed to create directories {}'.format(pth))
+
 
 # ...............................................
 def delete_file(file_name, delete_dir=False):
@@ -129,6 +189,7 @@ def delete_file(file_name, delete_dir=False):
                     msg = 'Failed to remove {}, {}'.format(pth, str(e))
     return success, msg
 
+
 # .............................................................................
 def get_csv_dict_reader(datafile, delimiter, fieldnames=None, log=None):
     try:
@@ -147,6 +208,7 @@ def get_csv_dict_reader(datafile, delimiter, fieldnames=None, log=None):
         logit(log, 'Opened file {} for dict read'.format(datafile))
     return dreader, f
 
+
 # .............................................................................
 def get_csv_reader(datafile, delimiter):
     try:
@@ -156,6 +218,7 @@ def get_csv_reader(datafile, delimiter):
         raise Exception('Failed to read or open {}, ({})'
                         .format(datafile, str(e)))
     return reader, f
+
 
 # .............................................................................
 def get_csv_writer(datafile, delimiter, doAppend=True):
@@ -173,6 +236,7 @@ def get_csv_writer(datafile, delimiter, doAppend=True):
                         .format(datafile, str(e)))
     return writer, f
 
+
 # ...............................................
 def reduce_image_size(
         infname, outfname, width, sample_method=Image.ANTIALIAS, overwrite=True, log=None):
@@ -184,3 +248,4 @@ def reduce_image_size(
         img = img.resize(size, sample_method)
         img.save(outfname)
         logit(log, 'Rewrote image {} to {}'.format(infname, outfname))
+

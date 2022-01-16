@@ -2,11 +2,6 @@
 import hashlib
 import os
 
-DUP_DIRS = ['/Users/astewart/Pictures/Imported',
-            '/Users/astewart/Pictures/ImportedAlready']
-GOOD_DIR = '/Users/astewart/Pictures/Lightroom'
-DELETEME_FILENAME = '/Users/astewart/Pictures/deleteme.txt'
-
 class DeDuper():
     def __init__(self, source_path, dest_path, *additional_paths):
         self.source_paths = [source_path, dest_path]
@@ -72,8 +67,15 @@ def hashfile(fullfname, blocksize=65536):
 
 # ..............................................................................
 # ..............................................................................
+DUP_DIRS = ['/Users/astewart/Pictures/Imported',
+            '/Users/astewart/Pictures/ImportedAlready']
+GOOD_DIR = '/Users/astewart/Pictures/Lightroom'
+DELETEME_FILENAME = '/Users/astewart/Pictures/deleteme.txt'
+
 DUP_DIRS = ['/Users/astewart/Pictures/ImportedAlready']
 DUP_DIRS.append(GOOD_DIR)
+
+DeDuper()
 dupfnames = findDups(DUP_DIRS)
 print('Writing duplicates ...')
 try:

@@ -11,11 +11,12 @@ CSV_FIELDS = (
 DELIMITER = '\t'
 ENCODING = 'utf-8'
 
-BASE_PATH='/Users/aimeestewart/Library/Mobile Documents/com~apple~CloudDocs/Documents/Home/Anaya/anaya_map'
+# Path/filenames
+MAC_PATH='/Users/aimeestewart/Library/Mobile Documents/com~apple~CloudDocs/Documents/Home/Anaya/anaya_map'
+BADENOV_PATH='/tank/anaya/'
 IN_DIR = 'dams'
 ANC_DIR = 'ancillary'
-OUT_DIR = 'output'
-OUT_NAME = 'dam_anaya'
+OUT_DIR ='outdam'
 THUMB_DIR = 'thumb'
 THUMB_DIR_SMALL = 'small_thumb'
 SAT_FNAME = 'op140814.tif'

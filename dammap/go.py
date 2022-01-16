@@ -1,16 +1,10 @@
-import sys
-
-# p2_gdal_loc = '/Library/Frameworks/GDAL.framework/Versions/2.1/Python/2.7/site-packages'
-# p2_pil_loc = '/Library/Python/2.7/site-packages/'
-# sys.path.insert(0, p2_gdal_loc)
-# sys.path.insert(0, p2_pil_loc)
-
+"""Process Anaya dam photographs and create CSV, shapefile, and KML file for display."""
+import argparse
 import os
-import time
 
-from constants import (BASE_PATH, IN_DIR, THUMB_DIR, OUT_DIR, OUT_NAME)
-
-from georef import PicMapper
+from common.constants import BADENOV_PATH, IN_DIR, OUT_DIR
+from common.util import fix_names_in_tree
+# from transform.dam_map import PicMapper
 
 kml_flag = False
 shp_flag = False
@@ -22,36 +16,57 @@ minX = -106.07259
 
 dam_buffer = .0002
 
-log = None
-image_path = os.path.join(BASE_PATH, IN_DIR)
-out_path = os.path.join(BASE_PATH, OUT_DIR)
-resize_path= os.path.join(out_path, THUMB_DIR)
+# ...............................................
+if __name__ == "__main__":
+    default_inpath = os.path.join(BADENOV_PATH, IN_DIR)
+    default_outpath = os.path.join(BADENOV_PATH, OUT_DIR)
 
-base_outfile = os.path.join(out_path, OUT_NAME)
-csv_fname = '{}.csv'.format(base_outfile)
-shp_fname = '{}.shp'.format(base_outfile)
-kml_fname = '{}.kml'.format(base_outfile)
+    # parser = argparse.ArgumentParser(
+    #     description='Process image data, to create geospatial outputs.')
+    # parser.add_argument(
+    #     'inpath', type=str, default=default_inpath,
+    #     help='The base path for BISON input data and outputs.')
+    # parser.add_argument('outpath', type=str, default=default_outpath,
+    #     help='The full path to GBIF input species occurrence data.')
+    # args = parser.parse_args()
+    # inpath = args.inpath
+    # outpath = args.outpath
 
-bbox = (minX, minY, maxX, maxY)
+    inpath = default_inpath
+    outpath = default_outpath
 
-sep = '_'
+    # fix_names_in_tree(inpath, do_files=False)
+    fix_names_in_tree(inpath, do_files=True)
 
+        # image_path = os.path.join(BASE_PATH, IN_DIR)
+        # out_path = os.path.join(BASE_PATH, OUT_DIR)
+        # resize_path= os.path.join(out_path, THUMB_DIR)
 
-pm = PicMapper(
-    image_path, buffer_distance=dam_buffer, bbox=bbox, 
-    shp_fname=shp_fname, kml_fname=None)
-
-
-
-# Read data
-imageData = pm.process_all_images(resize_width=500, resize_path=resize_path)
-
-print('Given: {} {} {} {}'.format(pm.bbox[0], pm.bbox[1], pm.bbox[2], pm.bbox[3]))
-print('Computed: '.format(pm._minX, pm._minY, pm._maxX, pm._maxY))
-
-# Reduce image sizes
-t = time.localtime()
-stamp = '{}_{}_{}-{}_{}'.format(t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min)
+# base_outfile = os.path.join(out_path, OUT_NAME)
+# csv_fname = '{}.csv'.format(base_outfile)
+# shp_fname = '{}.shp'.format(base_outfile)
+# kml_fname = '{}.kml'.format(base_outfile)
+#
+# bbox = (minX, minY, maxX, maxY)
+#
+# sep = '_'
+#
+#
+# pm = PicMapper(
+#     image_path, buffer_distance=dam_buffer, bbox=bbox,
+#     shp_fname=shp_fname, kml_fname=None)
+#
+#
+#
+# # Read data
+# imageData = pm.process_all_images(resize_width=500, resize_path=resize_path)
+#
+# print('Given: {} {} {} {}'.format(pm.bbox[0], pm.bbox[1], pm.bbox[2], pm.bbox[3]))
+# print('Computed: '.format(pm._minX, pm._minY, pm._maxX, pm._maxY))
+#
+# # Reduce image sizes
+# t = time.localtime()
+# stamp = '{}_{}_{}-{}_{}'.format(t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min)
 
 """
 
@@ -108,7 +123,7 @@ stamp = '{}_{}_{}-{}_{}'.format(t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_
     <Point>
         <coordinates>-106.067033333,35.4413833333,0</coordinates>
     </Point>
-    <img style="max-width:500px;" src="file:///Users/astewart/Home/2017AnayaPics/13-LL-GreyBottom/Grey-Bottom20151201_0002.JPG"></img>
+    <img style="max-width:500px;" dammap="file:///Users/astewart/Home/2017AnayaPics/13-LL-GreyBottom/Grey-Bottom20151201_0002.JPG"></img>
 </Placemark>
 </kml>
 

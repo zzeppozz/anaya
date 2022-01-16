@@ -438,11 +438,11 @@ class PicMapper(object):
 #                 <![CDATA[
 #                     <table width=100% cellpadding=0 cellspacing=0>
 #                         <tr>
-#                             <td><img width=100% src='{}' /></td>
+#                             <td><img width=100% dammap='{}' /></td>
 #                         </tr>
 #                     </table>]]>
 #                """.format(tfname)
-#         info = ('<img src="{}" alt="picture" width="{}" height="{}" align="left" />'
+#         info = ('<img dammap="{}" alt="picture" width="{}" height="{}" align="left" />'
 #                 .format(imgpth, twidth, theight))
         dam_info = 'Arroyo {} - {}, {}'.format(dam['arroyo_num'], 
                                            dam['arroyo'], 
@@ -453,7 +453,7 @@ class PicMapper(object):
         else:
             dims = 'width="{}" height="{}"'.format(width, height)
         
-        img_info = ('<img src="{}" alt="picture" {} align="left" />'
+        img_info = ('<img dammap="{}" alt="picture" {} align="left" />'
                     .format(imgpth, dims))
         
         lookat = skml.LookAt(gxaltitudemode=skml.GxAltitudeMode.relativetoseafloor,

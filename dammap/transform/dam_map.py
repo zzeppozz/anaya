@@ -5,8 +5,8 @@ from osgeo import ogr, osr
 from PIL import Image
 import time
 
-from src.tools.util import (get_csv_dict_reader, get_logger, logit, ready_filename, reduce_image_size)
-from src.transforrm.constants import (
+from dammap.common.util import (get_csv_dict_reader, get_logger, logit, ready_filename, reduce_image_size)
+from dammap.common.constants import (
     GEOM_WKT, LONG_FLD, LAT_FLD, IMG_META, DELIMITER, BASE_PATH, IN_DIR, ANC_DIR,
     THUMB_DIR, OUT_DIR, OUT_NAME, SAT_FNAME, RESIZE_WIDTH, IMAGES_KEY, CSV_FIELDS)
 
@@ -287,7 +287,7 @@ class PicMapper(object):
     def _create_feat_kml(self, kmlf, rel_thumbfname, damdata):
         """
         <img style="max-width:500px;" 
-         src="file:///Users/astewart/Home/2017AnayaPics/18-LL-Spring/SpringL1-20150125_0009.JPG">
+         dammap="file:///Users/astewart/Home/2017AnayaPics/18-LL-Spring/SpringL1-20150125_0009.JPG">
          SpringL1-20150125_0009 in 18-LL-Spring on 2015-1-25
         """
         if damdata['in_bounds'] is False:
@@ -305,7 +305,7 @@ class PicMapper(object):
             kmlf.write('    <name>{}</name>\n'.format(basefname))
             kmlf.write('    <description>{} in {} on {}</description>\n'
                        .format(basename, arroyo, dt))
-            kmlf.write('    <img style="max-width:{}px;" src="{}" />\n'
+            kmlf.write('    <img style="max-width:{}px;" dammap="{}" />\n'
                        .format(RESIZE_WIDTH, rel_thumbfname))
             kmlf.write('    <Point><coordinates>{},{}</coordinates></Point>\n'
                        .format(xdd, ydd))
@@ -366,7 +366,7 @@ class PicMapper(object):
                 kmlf.write('    <name>{}</name>\n'.format(basefname))
                 kmlf.write('    <description>{} in {} on {}</description>\n'
                            .format(basename, arroyo, dt))
-                kmlf.write('    <img style="max-width:{}px;" src="{}"/>\n'
+                kmlf.write('    <img style="max-width:{}px;" dammap="{}"/>\n'
                            .format(RESIZE_WIDTH, rel_thumbfname))
                 kmlf.write('    <LookAt>')
                 kmlf.write('       <longitude>{}</longitude>'.format(xdd))

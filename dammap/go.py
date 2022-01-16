@@ -2,71 +2,87 @@
 import argparse
 import os
 
-from common.constants import BADENOV_PATH, IN_DIR, OUT_DIR
-from common.util import fix_names_in_tree
-# from transform.dam_map import PicMapper
+from dammap.common.constants import IN_DIR, OUT_DIR, THUMB_DIR
+from dammap.common.util import fix_names_in_tree, parse_relative_fname, get_logger
+from transform.dam_map import PicMapper
 
 kml_flag = False
 shp_flag = False
 
-maxY = 35.45045
-minY = 35.43479
-maxX = -106.05353
-minX = -106.07259
+# ...............................................
+def fix_directory_filenames(inpath):
+    # Fix directories first
+    fix_names_in_tree(inpath, do_files=False)
+    # Fix filenames and test parsing before write
+    fix_names_in_tree(inpath, do_files=True)
 
-dam_buffer = .0002
+# ...............................................
+def test_names_in_tree(inpath):
+    """Tests filenames in a 2-level directory tree.
+
+    Args:
+        inpath (str): base directory
+    """
+    start = len(inpath) + 1
+    for root, dirlist, files in os.walk(inpath):
+        for fname in files:
+            if not fname.startswith(".") and fname.lower().endswith("jpg"):
+                full_fname = os.path.join(root, fname)
+                rel_fname = full_fname[start:]
+                arroyo_num, arroyo_name, name, [yr, mo, dy], picnum = parse_relative_fname(rel_fname)
+                print("Relative filename {} parses to: ".format(rel_fname))
+                print("   Arroyo: {} {}".format(arroyo_num, arroyo_name))
+                print("   Dam:    {}, {}-{}-{}, {}".format(name, yr, mo, dy, picnum))
 
 # ...............................................
 if __name__ == "__main__":
-    default_inpath = os.path.join(BADENOV_PATH, IN_DIR)
-    default_outpath = os.path.join(BADENOV_PATH, OUT_DIR)
+    MAC_PATH = '/Users/aimeestewart/Library/Mobile Documents/com~apple~CloudDocs/Documents/Home/Anaya/anaya_map'
+    BASE_PATH = '/tank/anaya/'
+    maxY = 35.45045
+    minY = 35.43479
+    maxX = -106.05353
+    minX = -106.07259
+    dam_buffer = .0002
+    bbox = (minX, minY, maxX, maxY)
 
     # parser = argparse.ArgumentParser(
     #     description='Process image data, to create geospatial outputs.')
     # parser.add_argument(
-    #     'inpath', type=str, default=default_inpath,
-    #     help='The base path for BISON input data and outputs.')
-    # parser.add_argument('outpath', type=str, default=default_outpath,
-    #     help='The full path to GBIF input species occurrence data.')
+    #     'basepath', type=str, default=BASE_PATH,
+    #     help='The base path for Dam Anaya input data and outputs.')
     # args = parser.parse_args()
     # inpath = args.inpath
-    # outpath = args.outpath
 
-    inpath = default_inpath
-    outpath = default_outpath
+    inpath = os.path.join(BASE_PATH, IN_DIR)
+    outpath = os.path.join(BASE_PATH, OUT_DIR)
+    resize_path = os.path.join(outpath, THUMB_DIR)
 
-    # fix_names_in_tree(inpath, do_files=False)
-    fix_names_in_tree(inpath, do_files=True)
+    # Correct input file and directory names
+    # fix_directory_filenames(inpath)
+    test_names_in_tree(inpath)
 
-        # image_path = os.path.join(BASE_PATH, IN_DIR)
-        # out_path = os.path.join(BASE_PATH, OUT_DIR)
-        # resize_path= os.path.join(out_path, THUMB_DIR)
+    # Define output filenames
+    base_fname = os.path.join(outpath, 'anaya_dams')
+    csv_fname = '{}.csv'.format(base_fname)
+    shp_fname = '{}.shp'.format(base_fname)
+    kml_fname = '{}.kml'.format(base_fname)
+    logger = get_logger(outpath)
 
-# base_outfile = os.path.join(out_path, OUT_NAME)
-# csv_fname = '{}.csv'.format(base_outfile)
-# shp_fname = '{}.shp'.format(base_outfile)
-# kml_fname = '{}.kml'.format(base_outfile)
-#
-# bbox = (minX, minY, maxX, maxY)
-#
-# sep = '_'
-#
-#
-# pm = PicMapper(
-#     image_path, buffer_distance=dam_buffer, bbox=bbox,
-#     shp_fname=shp_fname, kml_fname=None)
-#
-#
-#
-# # Read data
-# imageData = pm.process_all_images(resize_width=500, resize_path=resize_path)
-#
-# print('Given: {} {} {} {}'.format(pm.bbox[0], pm.bbox[1], pm.bbox[2], pm.bbox[3]))
-# print('Computed: '.format(pm._minX, pm._minY, pm._maxX, pm._maxY))
-#
-# # Reduce image sizes
-# t = time.localtime()
-# stamp = '{}_{}_{}-{}_{}'.format(t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min)
+    # pm = PicMapper(
+    #     inpath, buffer_distance=dam_buffer, bbox=bbox, shp_fname=shp_fname,
+    #     kml_fname=None, logger=logger)
+    #
+    # # Read or read/write data
+    # all_data = pm.read_image_data(csv_fname)
+    #
+    # imageData = pm.process_all_images(resize_width=500, resize_path=resize_path)
+    #
+    # print('Given: {} {} {} {}'.format(pm.bbox[0], pm.bbox[1], pm.bbox[2], pm.bbox[3]))
+    # print('Computed: '.format(pm._minX, pm._minY, pm._maxX, pm._maxY))
+    #
+    # # Reduce image sizes
+    # t = time.localtime()
+    # stamp = '{}_{}_{}-{}_{}'.format(t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min)
 
 """
 

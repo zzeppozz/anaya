@@ -8,6 +8,8 @@ from PIL import Image
 import sys
 import time
 
+from dammap.common.constants import SEPARATOR
+
 LOG_FORMAT = ' '.join(["%(asctime)s",
                        "%(threadName)s.%(module)s.%(funcName)s",
                        "line",
@@ -20,6 +22,12 @@ LOG_MAX = 52000000
 
 # .............................................................................
 def get_logger(outpath):
+    if not os.path.exists(outpath):
+        try:
+            os.makedirs(outpath)
+        except:
+            raise
+
     level = logging.DEBUG
     # get log filename
     scriptname, _ = os.path.splitext(os.path.basename(__file__))
@@ -38,18 +46,52 @@ def get_logger(outpath):
     log.addHandler(file_log_handler)
     return log
 
-def fix_name(name):
+
+# .............................................................................
+def _parse_filename(basename):
+    name = ""
+    year = ""
+    mon = ""
+    day = ""
+    num = ""
+    datecount = 0
+    for ch in basename:
+        if datecount < 8:
+            if ch.isalpha():
+                name += ch
+            elif ch.isdigit():
+                # fill year, month, date in that order
+                if len(year) < 4:
+                    year += ch
+                elif len(mon) < 2:
+                    mon += ch
+                elif len(day) < 2:
+                    day += ch
+                datecount += 1
+        elif ch.isdigit():
+            num += ch
+    return "{}_{}-{}-{}_{}".format(name, year, mon, day, num)
+
+# .............................................................................
+def fix_name(name, ext=None):
     """Modify name to consistent pattern.
 
      Exclude special characters, apostrophes, and parentheses and correct extensions
 
      Args:
-        name: input string for correction
+        name (str): input directory or base filename for correction
+        ext (str): optional extension, used only when fixing filenames
 
     Returns:
-        string that is the modified name
+        string that is the modified name.  If filename, includes extension.
     """
     newchars = []
+    # If this is a filename, and extension was not split out
+    # remove extension chars from basename, and set extension correctly
+    photo_ext = "jpg"
+    if ext == "" and name.lower().endswith(photo_ext):
+        name = name[:-3]
+        ext = ".{}".format(photo_ext)
     found_paren = False
     for i in range(0, len(name)):
         ch = name[i]
@@ -57,12 +99,17 @@ def fix_name(name):
         if ch.isascii() and ch not in (" ", "'"):
             if ch.isalnum() or ch == "_":
                 newchars.append(ch)
-            # Replace first ) with _, remove any others
+            # Replace first ) with _, remove others
             elif ch == ")":
                 if not found_paren:
                     found_paren = True
                     newchars.append("_")
-    return ''.join(newchars)
+    newname = ''.join(newchars)
+    # Parse date and number from filenames, then re-concatenate extension
+    if ext is not None:
+        newname = _parse_filename(newname)
+        newname += ext
+    return newname
 
 # .............................................................................
 def fix_names_in_tree(inpath, do_files=False):
@@ -72,27 +119,64 @@ def fix_names_in_tree(inpath, do_files=False):
         inpath (str): base directory
         do_files (bool): False if rename directories, True if rename files
     """
+    start = len(inpath) + 1
     for root, dirlist, files in os.walk(inpath):
-        count = 0
-        for olddir in dirlist:
-            # Fix filenames
-            if not do_files:
+        # Fix directories
+        if not do_files:
+            for olddir in dirlist:
+                # Fix filenames
                 newdir = fix_name(olddir)
-                # os.rename(os.path.join(root, olddir), os.path.join(root, newdir))
+                os.rename(os.path.join(root, olddir), os.path.join(root, newdir))
                 print("{} --> {}".format(olddir, newdir))
-        for fname in files:
-
-            if do_files:
+        # Fix files
+        else:
+            for fname in files:
                 if not fname.startswith("."):
                     basename, ext = os.path.splitext(fname)
-                    newname = fix_name(basename)
+                    newname = fix_name(basename, ext=ext)
+                    if not ext:
+                        print(" *** Badname {} --> {}".format(fname, newname))
                     old_filename = os.path.join(root, fname)
-                    new_filename = os.path.join(root, newname + ext)
-                    # os.rename(old_filename, new_filename)
-                    print("{} --> {}".format(basename, newname))
-            count += 1
-        if count > 30:
-            break
+                    new_filename = os.path.join(root, newname)
+                    # test before rename
+                    rel_fname = new_filename[start:]
+                    arroyo_num, arroyo_name, name, [yr, mo, dy], picnum = parse_relative_fname(rel_fname)
+                    if None in (arroyo_num, arroyo_name, name, yr, mo, dy, picnum):
+                        print("Stop me now! {}".format(rel_fname))
+                    os.rename(old_filename, new_filename)
+                    print("{} --> {}".format(fname, newname))
+
+# ...............................................
+def parse_relative_fname(relfname):
+    """Parse a relative filename into metadata about this file.
+
+    Args:
+        relfname (str): relative filename containing parent directory and filename
+    """
+    arroyo_num = arroyo_name = name = yr = mo = dy = picnum = None
+    try:
+        dirname, fname = relfname.split(os.sep)
+    except ValueError:
+        print('Relfname {} does not parse into 2'.format(relfname))
+        return arroyo_num, arroyo_name, name, [yr, mo, dy], picnum
+    try:
+        arroyo_num, arroyo_name = dirname.split(SEPARATOR)
+    except ValueError:
+        print('Dirname {} does not parse into 2'.format(dirname))
+        return arroyo_num, arroyo_name, name, [yr, mo, dy], picnum
+
+    basename, ext = os.path.splitext(fname)
+    try:
+        name, fulldate, num = basename.split(SEPARATOR)
+    except ValueError:
+        print('Basename {} does not parse into 3'.format(basename))
+        return arroyo_num, arroyo_name, name, [yr, mo, dy], picnum
+    try:
+        yr, mo, day = fulldate.split("-")
+    except ValueError:
+        print('Fulldate {} does not parse into 3'.format(fulldate))
+
+    return arroyo_num, arroyo_name, name, [yr, mo, dy], picnum
 
 # .............................................................................
 def logit(log, msg):
@@ -103,11 +187,11 @@ def logit(log, msg):
 
 
 # .............................................................................
-def get_bbox(bbox_str, log=None):
+def get_bbox(bbox_str):
     bbox = []
     parts = bbox_str.split(',')
     if len(parts) != 4:
-        logit(log, 'Failed to get 4 values for bbox from {}'.format(bbox_str))
+        print('Failed to get 4 values for bbox from {}'.format(bbox_str))
     else:
         for i in range(len(parts)):
             pt = parts[i].strip()
@@ -115,7 +199,7 @@ def get_bbox(bbox_str, log=None):
             try:
                 val = float(tmp)
             except:
-                logit(log, 'Failed to parse element {} from {} into float value'
+                print('Failed to parse element {} from {} into float value'
                       .format(i, bbox_str))
             else:
                 bbox.append(val)
@@ -191,7 +275,7 @@ def delete_file(file_name, delete_dir=False):
 
 
 # .............................................................................
-def get_csv_dict_reader(datafile, delimiter, fieldnames=None, log=None):
+def get_csv_dict_reader(datafile, delimiter, fieldnames=None):
     try:
         f = open(datafile, 'r')
         if fieldnames is None:
@@ -205,7 +289,7 @@ def get_csv_dict_reader(datafile, delimiter, fieldnames=None, log=None):
         raise Exception('Failed to read or open {}, ({})'
                         .format(datafile, str(e)))
     else:
-        logit(log, 'Opened file {} for dict read'.format(datafile))
+        print('Opened file {} for dict read'.format(datafile))
     return dreader, f
 
 

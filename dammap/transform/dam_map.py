@@ -5,14 +5,13 @@ from osgeo import ogr, osr
 from PIL import Image
 import time
 
-from dammap.common.util import (get_csv_dict_reader, get_logger, logit, ready_filename, reduce_image_size)
+from dammap.common.util import (
+    get_csv_dict_reader, get_logger, logit, ready_filename, reduce_image_size)
 from dammap.common.constants import (
-    GEOM_WKT, LONG_FLD, LAT_FLD, IMG_META, DELIMITER, BASE_PATH, IN_DIR, ANC_DIR,
-    THUMB_DIR, OUT_DIR, OUT_NAME, SAT_FNAME, RESIZE_WIDTH, IMAGES_KEY, CSV_FIELDS)
+    GEOM_WKT, LONG_FLD, LAT_FLD, IMG_META, DELIMITER, SEPARATOR, IN_DIR, ANC_DIR,
+    THUMB_DIR, OUT_DIR, SAT_FNAME, RESIZE_WIDTH, IMAGES_KEY, CSV_FIELDS)
 
-RPAREN = ')'
-DELETE_CHARS = ['\'', ',', '"', ' ', '(', ')', '_']
-IMG_EXTS = ['jpg', 'jpeg', 'tiff', 'tif', 'rtif', 'rtiff']
+# DELETE_CHARS = ['\'', ',', '"', ' ', '(', ')', '_']
 
 # .............................................................................
 class PicMapper(object):
@@ -62,65 +61,68 @@ class PicMapper(object):
         self._min_y = bbox[1]
         self._max_x = bbox[2]
         self._max_y = bbox[3]
-        self._logger = get_logger(os.path.join(BASE_PATH, OUT_DIR))
+        if not logger:
+            logger = get_logger(os.path.join(self.base_path, OUT_DIR))
+        self._logger = logger
 
-    # ...............................................
-    def _clean_name(self, name):
-        """Remove non-ascii and other special characters; replace first right paren with underscore"""
-        tmpchars = []
-        idx = name.index(RPAREN)
-        tmp_name = name[0:idx] + '_' + name[idx+1:]
-        for ch in tmp_name:
-            if ch.isascii() and ch not in DELETE_CHARS:
-                tmpchars.append(ch)
-        new_name = ''.join(tmpchars)
-        return new_name
+    # # ...............................................
+    # def _clean_name(self, name):
+    #     """Remove non-ascii and other special characters; replace first right paren with underscore"""
+    #     tmpchars = []
+    #     idx = name.index(RPAREN)
+    #     tmp_name = name[0:idx] + '_' + name[idx+1:]
+    #     for ch in tmp_name:
+    #         if ch.isascii() and ch not in DELETE_CHARS:
+    #             tmpchars.append(ch)
+    #     new_name = ''.join(tmpchars)
+    #     return new_name
+    #
+    # # ...............................................
+    # def _standardize_name(self, filename, fullpath):
+    #     date_str = num_str = '?'
+    #     _, arroyo_dir = os.path.split(fullpath)
+    #     new_arroyo_dir = self._clean_name(arroyo_dir)
+    #     arroyo_num, arroyo_name = new_arroyo_dir.split('_')
+    #
+    #     # Fix missing extensions manually
+    #     basename, ext = os.path.splitext(filename)
+    #     if ext == '':
+    #         logit(self._logger, 'Missing extension in {}, dir {}'.format(filename, fullpath))
+    #         ext = '.JPG'
+    #
+    #     # Find first number in filename, indicating start of date/time string
+    #     for i in range(len(basename)):
+    #         try:
+    #             int(basename[i])
+    #             break
+    #         except:
+    #             pass
+    #     name = basename[:i]
+    #     rest = basename[i:]
+    #     new_name = self._clean_name(name)
+    #     # Date time parts split by underscore
+    #     parts = rest.split('_')
+    #     if len(parts) == 2:
+    #         date_str, num_str = parts
+    #     # or not
+    #     elif len(parts) == 1:
+    #         date_str = parts[0][:8]
+    #         num_str = parts[0][8:]
+    #     else:
+    #         logit(self._logger, '** Bad filename {}'.format(filename))
+    #
+    #     try:
+    #         new_filename = '{}_{}_{}{}'.format(new_name, date_str, num_str, ext)
+    #     except:
+    #         new_filename = filename
+    #
+    #     picnum = int(num_str)
+    #     yr = int(date_str[:4])
+    #     mo = int(date_str[4:6])
+    #     dy = int(date_str[6:8])
+    #
+    #     return new_filename, name, picnum, (yr, mo, dy), (arroyo_num, arroyo_name)
 
-    # ...............................................
-    def _standardize_name(self, filename, fullpath):
-        date_str = num_str = '?'
-        _, arroyo_dir = os.path.split(fullpath)
-        new_arroyo_dir = self._clean_name(arroyo_dir)
-        arroyo_num, arroyo_name = new_arroyo_dir.split('_')
-
-        # Fix missing extensions manually
-        basename, ext = os.path.splitext(filename)
-        if ext == '':
-            logit(self._logger, 'Missing extension in {}, dir {}'.format(filename, fullpath))
-            ext = '.JPG'
-
-        # Find first number in filename, indicating start of date/time string
-        for i in range(len(basename)):
-            try:
-                int(basename[i])
-                break
-            except:
-                pass
-        name = basename[:i]
-        rest = basename[i:]
-        new_name = self._clean_name(name)
-        # Date time parts split by underscore
-        parts = rest.split('_')
-        if len(parts) == 2:
-            date_str, num_str = parts
-        # or not
-        elif len(parts) == 1:
-            date_str = parts[0][:8]
-            num_str = parts[0][8:]
-        else:
-            logit(self._logger, '** Bad filename {}'.format(filename))
-
-        try:
-            new_filename = '{}_{}_{}{}'.format(new_name, date_str, num_str, ext)
-        except:
-            new_filename = filename
-
-        picnum = int(num_str)
-        yr = int(date_str[:4])
-        mo = int(date_str[4:6])
-        dy = int(date_str[6:8])
-
-        return new_filename, name, picnum, (yr, mo, dy), (arroyo_num, arroyo_name)
     # ...............................................
     def _get_date(self, tags):
         # Get date
@@ -129,13 +131,6 @@ class PicMapper(object):
             return [int(x) for x in dtstr.split(':')]
         except:
             return None
-    
-    # ...............................................
-    def _log(self, msg):
-        if self._logger:
-            self._logger.info(msg)
-        else:
-            print(msg)
             
     # ...............................................
     def _get_location_vals(self, tags, locKey, dirKey, negativeIndicator):
@@ -234,13 +229,13 @@ class PicMapper(object):
         xdd = float(damdata[LONG_FLD])
         ydd = float(damdata[LAT_FLD])
         if xdd < self.bbox[0]:
-            self._logger('X value {} < min {}'.format(xdd, self.bbox[0]))
+            self._logger.warn('X value {} < min {}'.format(xdd, self.bbox[0]))
         elif xdd > self.bbox[2]:
-            self._logger('X value {} > max {}'.format(xdd, self.bbox[2]))
+            self._logger.warn('X value {} > max {}'.format(xdd, self.bbox[2]))
         elif ydd < self.bbox[1]:
-            self._logger('Y value {} < min {}'.format(ydd, self.bbox[1]))
+            self._logger.warn('Y value {} < min {}'.format(ydd, self.bbox[1]))
         elif ydd > self.bbox[3]:
-            self._logger('Y value {} > max {}'.format(ydd, self.bbox[3]))
+            self._logger.warn('Y value {} > max {}'.format(ydd, self.bbox[3]))
         else:
             good_geo = True
         return good_geo
@@ -254,7 +249,7 @@ class PicMapper(object):
             try:
                 [yr, mo, day] = damdata['img_date']
             except:
-                logit(self._logger, 'damdata does not have a valid img_date')
+                self._logger.warn('damdata does not have a valid img_date')
             relpth, basefname = os.path.split(rel_thumbfname)  
             wkt = damdata[GEOM_WKT]
             feat = ogr.Feature( lyr.GetLayerDefn() )
@@ -277,7 +272,7 @@ class PicMapper(object):
                 geom = ogr.CreateGeometryFromWkt(wkt)
                 feat.SetGeometryDirectly(geom)
             except Exception as e:
-                self._logger('Failed to fillOGRFeature, e = {}'.format(e))
+                self._logger.warn('Failed to fillOGRFeature, e = {}'.format(e))
             else:
                 # Create new feature, setting FID, in this layer
                 lyr.CreateFeature(feat)
@@ -357,7 +352,7 @@ class PicMapper(object):
                 ydd = damdata[LAT_FLD]
                 arroyo = damdata['arroyo']
             except Exception as e:
-                self._logger('Failed reading data {}'.format(e))
+                self._logger.error('Failed reading data {}'.format(e))
             else:
                 _, basefname = os.path.split(rel_thumbfname)
                 basename, _ = os.path.splitext(basefname)
@@ -389,8 +384,9 @@ class PicMapper(object):
             dx = abs(abs(x) - abs(currx))
             dy = abs(abs(y) - abs(curry))
             if dx < self.buffer_distance or dy < self.buffer_distance:
-                self._logger('Current file {} is within buffer of {} (dx = {}, dy = {})'
-                          .format(currfname, fname, dx, dy))
+                self._logger.info(
+                    'Current file {} is within buffer of {} (dx = {}, dy = {})'.format(
+                        currfname, fname, dx, dy))
                 break
         all_coords[currfname] = (currx, curry)
         return all_coords
@@ -438,7 +434,7 @@ class PicMapper(object):
             self._close_kml_file(kmlf)
         if dataset:
             dataset.Destroy()
-            self._logger('Closed/wrote dataset {}'.format(shpfname))
+            self._logger.info('Closed/wrote dataset {}'.format(shpfname))
     
     
     # ...............................................
@@ -451,7 +447,7 @@ class PicMapper(object):
             # Get Exif tags
             tags = exifread.process_file(f)
         except Exception as e:
-            self._logger('{}: Unable to read image metadata, {}'.format(
+            self._logger.error('{}: Unable to read image metadata, {}'.format(
                 fullname, e))
         finally:
             try:
@@ -463,11 +459,11 @@ class PicMapper(object):
             try:
                 dd, xdms, ydms = self._get_dd(tags)
             except Exception as e:
-                self._logger('{}: Unable to get x y, {}'.format(fullname, e))
+                self._logger.error('{}: Unable to get x y, {}'.format(fullname, e))
             try:
                 yr, mo, day = self._get_date(tags)
             except Exception as e:
-                self._logger('{}: Unable to get date, {}'.format(fullname, e))
+                self._logger.error('{}: Unable to get date, {}'.format(fullname, e))
         return (yr, mo, day), dd, xdms, ydms
     
     # ...............................................
@@ -535,39 +531,7 @@ class PicMapper(object):
         year = int(dt[:4])
         picnum = int(count)
         return arroyo_num, arroyo_name, name, year, picnum    
-        
-    # # ...............................................
-    # def parse_relfname(self, relfname):
-    #     parts = relfname.split(os.sep)
-    #     arroyo = parts[0]
-    #     arroyo_num, arroyo_name = arroyo.split('.')
-    #     basename, _ = os.path.splitext(parts[-1])
-    #
-    #     if len(parts) != 2:
-    #         self._logger('Relative path parts {}'.format(parts))
-    #
-    #     parts = basename.split('_')
-    #     if len(parts) == 1:
-    #         ntmp = parts[0]
-    #         ctmp = None
-    #     elif len(parts) == 2:
-    #         ntmp, ctmp = parts
-    #         picnum = int(ctmp)
-    #
-    #     for i in range(len(ntmp)):
-    #         if ntmp[i].isdigit():
-    #             break
-    #
-    #     name = ntmp[:i]
-    #     dtmp = ntmp[i:i+8]
-    #     if ctmp is None:
-    #         ctmp = ntmp[i+8:]
-    #     yr = dtmp[:4]
-    #     mo = dtmp[4:6]
-    #     dy = dtmp[6:]
-    #
-    #     return arroyo_num, arroyo_name, name, [yr, mo, dy], picnum
-        
+
     # ...............................................
     def process_all_images(self, resize_width=RESIZE_WIDTH, resize_path=None):
         """
@@ -576,8 +540,6 @@ class PicMapper(object):
                                           fullname: ([yr, mo, day], dd, xdms, ydms)}
         }
         """
-        if resize_path.endswith('/'):
-            resize_path = resize_path[:-1]
         image_data = {}
         for root, _, files in os.walk(self.image_path):
             for fname in files:
@@ -626,7 +588,7 @@ class PicMapper(object):
         return date_vals
         
     # ...............................................
-    def read_csv_metadata(self, csv_fname, delimiter=DELIMITER):
+    def read_data_from_file(self, csv_fname, delimiter=DELIMITER):
         all_data = {}
         arroyos = {}
         img_meta = {}
@@ -658,8 +620,9 @@ class PicMapper(object):
                 except:
                     arroyos[arroyo_name] = [relfname]
         except Exception as e:
-            self._logger('Failed to read image metadata from {}, line {}, {}'.format(
-                csv_fname, drdr.line_num, e))
+            self._logger.error(
+                'Failed to read image metadata from {}, line {}, {}'.format(
+                    csv_fname, drdr.line_num, e))
         finally:
             f.close()
             
@@ -671,9 +634,25 @@ class PicMapper(object):
         all_data['out_of_range'] = img_out_of_range
 
         return all_data
-    
+
     # ...............................................
-    def read_image_data(self):
+    def _read_image_data(self, csv_fname):
+        if os.path.exists(csv_fname):
+            all_data = self.read_data_from_file(csv_fname)
+        else:
+            all_data = self.read_data_from_images(csv_fname)
+            pm.write_csv_data(csv_fname, all_data[IMAGES_KEY])
+        return all_data
+
+    # ...............................................
+    def test_extent(self, bbox):
+        self._logger.info(
+            'Given: {} {} {} {}'.format(
+                self.bbox[0], self.bbox[1], self.bbox[2], self.bbox[3]))
+        self._logger.info('Computed: {}'.format(pm.extent))
+
+    # ...............................................
+    def read_data_from_images(self, csv_fname):
         """Read metadata from all image files within the BASE_PATH """
         all_data = {'BASE_PATH': BASE_PATH,
                     'arroyos': None,
@@ -694,7 +673,7 @@ class PicMapper(object):
                     relfname = fullfname[len(self.image_path)+1:]
                     xdeg = xmin = xsec = xdir = ydeg = ymin = ysec = ydir = ''
                     lon = lat = wkt = ''
-                    self._logger('Reading {} ...'.format(fullfname))
+                    self._logger.info('Reading {} ...'.format(fullfname))
     
                     _, dam_name, picnum, dam_date, (arroyo_num, arroyo_name) = \
                         self._standardize_name(fname, root)
@@ -706,7 +685,7 @@ class PicMapper(object):
                         (ydeg, ymin, ysec, ydir) = ydms
                     if xydd is None:
                         in_bounds = False
-                        self._logger('Failed to return decimal degrees for {}'.format(relfname))
+                        self._logger.warn('Failed to return decimal degrees for {}'.format(relfname))
                     else:
                         lon = xydd[0]
                         lat = xydd[1]

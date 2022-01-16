@@ -10,10 +10,9 @@ CSV_FIELDS = (
 
 DELIMITER = '\t'
 ENCODING = 'utf-8'
+SEPARATOR = "_"
 
 # Path/filenames
-MAC_PATH='/Users/aimeestewart/Library/Mobile Documents/com~apple~CloudDocs/Documents/Home/Anaya/anaya_map'
-BADENOV_PATH='/tank/anaya/'
 IN_DIR = 'dams'
 ANC_DIR = 'ancillary'
 OUT_DIR ='outdam'

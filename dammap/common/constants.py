@@ -1,9 +1,20 @@
-from enum import Enum
-import inspect
+# Path/filenames
+IN_DIR = "dams"
+ANC_DIR = "ancillary"
+OUT_DIR ="outdam"
+THUMB_DIR = "thumb"
+THUMB_DIR_SMALL = "small_thumb"
+SAT_FNAME = "op140814.tif"
+RESIZE_WIDTH = 500
+SAT_IMAGE_FNAME = "op140814.tif"
 
-GEOM_WKT = "geomwkt"
-LONG_FLD = "longitude"
-LAT_FLD = "latitude"
+# Sanity check
+ARROYO_COUNT = 69
+IMAGE_COUNT = 2886
+
+DELIMITER = "\t"
+ENCODING = "utf-8"
+SEPARATOR = "_"
 
 # def get_image_keys(key_class):
 #     keys = []
@@ -14,18 +25,17 @@ LAT_FLD = "latitude"
 #     return keys
 
 # Metadata for all dam data
-class ALL_DATA_KEYS (Enum):
+class ALL_DATA_KEYS ():
     BASE_PATH = "base_path"
     ARROYO_COUNT = "arroyo_count"
     ARROYO_META = "arroyo_meta"
     IMAGE_META = "img_meta"
+    IMAGE_OUT_OF_RANGE = "img_out_of_range_meta"
     IMG_COUNT = "img_count"
     IMG_GEO_COUNT = "img_count_geo"
-    OUT_OF_RANGE = "out_of_range"
-    DAM_DATE = "dam_date"
 
 # Metadata for image files
-class IMAGE_KEYS(Enum):
+class IMAGE_KEYS():
     # Data from directory and filenames
     FILE_PATH = "fullpath"
     ARROYO_NAME = "arroyo"
@@ -70,23 +80,15 @@ CSV_FIELDS = [
     IMAGE_KEYS.IN_BNDS
 ]
 
-DELIMITER = "\t"
-ENCODING = "utf-8"
-SEPARATOR = "_"
+CSV_FIELDS_SMALL = [
+    IMAGE_KEYS.FILE_PATH,
+    IMAGE_KEYS.ARROYO_NAME,
+    IMAGE_KEYS.ARROYO_NUM,
+    IMAGE_KEYS.DAM_NAME,
+    IMAGE_KEYS.DAM_NUM,
+    IMAGE_KEYS.DAM_DATE
+]
 
-# Sanity check
-ARROYO_COUNT = 69
-IMAGE_COUNT = 2886
-
-# Path/filenames
-IN_DIR = "dams"
-ANC_DIR = "ancillary"
-OUT_DIR ="outdam"
-THUMB_DIR = "thumb"
-THUMB_DIR_SMALL = "small_thumb"
-SAT_FNAME = "op140814.tif"
-RESIZE_WIDTH = 500
-SAT_IMAGE_FNAME = "op140814.tif"
 
 # maxY = 35.45045
 # minY = 35.43479

@@ -321,8 +321,6 @@ def get_csv_dict_reader(datafile, delimiter, fieldnames=None):
     except Exception as e:
         raise Exception('Failed to read or open {}, ({})'
                         .format(datafile, str(e)))
-    else:
-        print('Opened file {} for dict read'.format(datafile))
     return dreader, f
 
 
@@ -355,7 +353,6 @@ def get_csv_dict_writer(csvfile, header, delimiter, fmode="w"):
         raise e
     else:
         writer.writeheader()
-        print("Opened file {} and wrote header".format(csvfile))
     return writer, f
 
 

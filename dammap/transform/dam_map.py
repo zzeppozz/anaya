@@ -10,8 +10,8 @@ from dammap.common.util import (
     get_logger, logit, ready_filename, reduce_image_size)
 
 from dammap.common.constants import (
-    GEOM_WKT, LONG_FLD, LAT_FLD, IMG_META, DELIMITER, SEPARATOR, IN_DIR, ANC_DIR,
-    THUMB_DIR, OUT_DIR, SAT_FNAME, RESIZE_WIDTH, ARROYO_COUNT, IMAGE_COUNT, CSV_FIELDS)
+    IMG_META, DELIMITER, SEPARATOR, IN_DIR, ANC_DIR, THUMB_DIR, OUT_DIR, SAT_FNAME,
+    RESIZE_WIDTH, ARROYO_COUNT, IMAGE_COUNT, CSV_FIELDS)
 
 from dammap.common.constants import ALL_DATA_KEYS as ADK
 from dammap.common.constants import IMAGE_KEYS as IK
@@ -23,23 +23,27 @@ class PicMapper(object):
     """Read a directory of image files, and create geospatial files for mapping them.
     Yelp help: https://engineeringblog.yelp.com/2017/06/making-photos-smaller.html
     """
-    FIELDS = [('arroyo', ogr.OFTString), 
-              ('fullpath', ogr.OFTString), 
-              ('relpath', ogr.OFTString), 
-              ('basename', ogr.OFTString),
-              ('img_date', ogr.OFTString),
-              (GEOM_WKT, ogr.OFTString),
-              (LONG_FLD, ogr.OFTReal), 
-              (LAT_FLD, ogr.OFTReal), 
-              ('xdirection', ogr.OFTString),
-              ('xdegrees', ogr.OFTReal), 
-              ('xminutes', ogr.OFTReal), 
-              ('xseconds', ogr.OFTReal), 
-              ('ydirection', ogr.OFTString),
-              ('ydegrees', ogr.OFTReal), 
-              ('yminutes', ogr.OFTReal), 
-              ('yseconds', ogr.OFTReal)]
-
+    FIELDS = [
+        (IK.FILE_PATH, ogr.OFTString),
+        (IK.ARROYO_NAME, ogr.OFTString),
+        (IK.ARROYO_NUM, ogr.OFTInteger),
+        (IK.DAM_NAME, ogr.OFTString),
+        (IK.DAM_NUM, ogr.OFTString),
+        (IK.DAM_DATE, ogr.OFTString),
+        (IK.IMG_DATE, ogr.OFTString),
+        (IK.LON, ogr.OFTReal),
+        (IK.LAT, ogr.OFTReal),
+        (IK.WKT, ogr.OFTString),
+        (IK.X_DIR, ogr.OFTString),
+        (IK.X_DEG, ogr.OFTReal),
+        (IK.X_MIN, ogr.OFTReal),
+        (IK.X_SEC, ogr.OFTReal),
+        (IK.Y_DIR, ogr.OFTString),
+        (IK.Y_DEG, ogr.OFTReal),
+        (IK.Y_MIN, ogr.OFTReal),
+        (IK.Y_SEC, ogr.OFTReal),
+        (IK.IN_BNDS, ogr.OFTBinary)
+    ]
 
 # ............................................................................
 # Constructor
@@ -420,13 +424,14 @@ class PicMapper(object):
     
     # ...............................................
     def eval_extent(self, x: float, y: float) -> bool:
-        in_bounds = True
+        """Return 1 if point is within bbox, 0 if outside."""
+        in_bounds = 1
         # in assigned bbox (min_x, min_y, max_x, max_y)?
         if (x < self.bbox[0] or 
             x > self.bbox[2] or 
             y < self.bbox[1] or 
             y > self.bbox[3]):
-            in_bounds = False
+            in_bounds = 0
             
         if x < self._min_x:
             self._min_x = x
@@ -497,7 +502,7 @@ class PicMapper(object):
                 arroyo_name = rec[IK.ARROYO_NAME]
 
                 # Count images with good geo data
-                if rec[GEOM_WKT].startswith('Point') and rec[IK.IN_BNDS]:
+                if rec[IK.WKT].startswith('Point') and rec[IK.IN_BNDS]:
                     # Save metadata for each image
                     img_meta[relfname] = rec
                     img_count_geo += 1
@@ -519,18 +524,9 @@ class PicMapper(object):
         self.all_data[ADK.ARROYO_COUNT] = len(arroyos.keys())
         self.all_data[ADK.ARROYO_META] = arroyos
         self.all_data[ADK.IMAGE_META] = img_meta
-        self.all_data[ADK.OUT_OF_RANGE] = img_out_of_range
+        self.all_data[ADK.IMAGE_OUT_OF_RANGE] = img_out_of_range
         self.all_data[ADK.IMG_COUNT] = img_count_total
         self.all_data[ADK.IMG_GEO_COUNT] = img_count_geo
-
-    # # ...............................................
-    # def read_image_metadata(self, csv_fname):
-    #     if os.path.exists(csv_fname):
-    #         all_data = self.read_data_from_file(csv_fname)
-    #     else:
-    #         all_data = self.read_data_from_image_files(csv_fname)
-    #         pm.write_csv_data(csv_fname, all_data['img_meta'])
-    #     return all_data
 
     # ...............................................
     def test_extent(self, bbox):
@@ -545,18 +541,22 @@ class PicMapper(object):
 
         Results in:
             all_data dictionary with keys/values:
-            'BASE_PATH': base path containing input and output directories
-            'arroyos': {arroyo_name: [rel_fname] ...}
-            'img_count': number of images
-            'img_count_geo': number of georeferenced images
-            'images': {rel_fname: {image_metadata} ...}
+                'base_path': base path containing input and output directories
+                'arroyo_meta': {arroyo_name: [rel_fname, ...], ...}
+                'image_meta': {rel_fname: {image_metadata}, ...}
+                'out_of_range': {rel_fname: {image_metadata}, ...}
+                'img_count': total number of images
+                'img_count_geo': number of georeferenced and in-bounds images
         """
         start_idx = len(self.image_path) + 1
         self.all_data = {
             ADK.BASE_PATH: self.base_path,
             ADK.ARROYO_META: {},
+            ADK.ARROYO_COUNT: 0,
             ADK.IMAGE_META: {},
-            ADK.IMG_COUNT: 0
+            ADK.IMAGE_OUT_OF_RANGE: {},
+            ADK.IMG_COUNT: 0,
+            ADK.IMG_GEO_COUNT: 0
         }
         arroyos = {}
         img_count_geo = 0
@@ -587,7 +587,7 @@ class PicMapper(object):
                         self.all_data[ADK.ARROYO_META][arroyo_name].append(relfname)
                     except:
                         self.all_data[ADK.ARROYO_META][arroyo_name] = [relfname]
-        self.all_data[ADK.ARROYO_COUNT] = len(arroyos.keys())
+        self.all_data[ADK.ARROYO_COUNT] = len(self.all_data[ADK.ARROYO_META])
 
     # # ...............................................
     # def compare_all_data(self, other_data):
@@ -645,7 +645,17 @@ class PicMapper(object):
         self.all_data[ADK.IMG_GEO_COUNT] = img_count_geo
 
     # ...............................................
-    def test_filename_counts(self):
+    def test_counts(self):
+        # Read into metadata
+        if not self.all_data:
+            self.read_data_from_image_files()
+        # Test the counts in the directories and files
+        self._test_dir_counts()
+        # Test the counts in the arroyos dictionary
+        self._test_meta_counts()
+
+    # ...............................................
+    def _test_dir_counts(self):
         # Count the image files in the directory
         fcount = dcount = 0
         for root, dirs, files in os.walk(self.image_path):
@@ -655,30 +665,44 @@ class PicMapper(object):
             for dirname in dirs:
                 if not dirname.startswith("."):
                     dcount += 1
-        if not dcount == ARROYO_COUNT:
-            print('Failed to get the correct number of arroyos from the directory')
-        if not self.all_data[ADK.ARROYO_COUNT] == ARROYO_COUNT:
-            print('Failed to get the correct number of arroyos from the metadata')
-        if not fcount == IMAGE_COUNT:
-            print('Failed to get the correct number of images from the directory')
-        # Read into metadata
-        if not self.all_data:
-            self.read_data_from_image_files()
+        if dcount != ARROYO_COUNT:
+            print("Error: Found {} arroyo directories, expected {}".format(
+                dcount, ARROYO_COUNT))
+        if fcount != IMAGE_COUNT:
+            print("Error: Found {} images files, expected {}".format(fcount, IMAGE_COUNT))
+
+    # ...............................................
+    def _test_meta_counts(self):
         # Count the image files in the arroyos dictionary
-        count = 0
+        ai_count = 0
         for ar, filelist in self.all_data[ADK.ARROYO_META].items():
             for f in filelist:
-                count += 1
-        if not count == IMAGE_COUNT:
-            print('Failed to get the correct number of images from the arroyos metadata')
+                ai_count += 1
+        if not ai_count == IMAGE_COUNT:
+            print("Error: Found {} images in arroyo_meta, expected {}".format(
+                ai_count, IMAGE_COUNT))
+
+        # Count the image files in the img_meta and out_of_range dictionaries
+        key_count = (
+                len(self.all_data[ADK.IMAGE_META])
+                + len(self.all_data[ADK.IMAGE_OUT_OF_RANGE]))
+        if not key_count == IMAGE_COUNT:
+            print("Error: Found {} images in img_meta, expected {}".format(
+                key_count, IMAGE_COUNT))
+
         # Count the image files in the images dictionary
-        if not len(self.all_data['img_meta']) == IMAGE_COUNT:
-            print('Failed to get the correct number of images from the images metadata')
+        if not self.all_data[ADK.IMG_COUNT] == IMAGE_COUNT:
+            print("Error: Found {} image count, expected {}".format(
+                self.all_data[ADK.IMG_COUNT], IMAGE_COUNT))
 
 
     # ...............................................
-    def write_csv_data(self, out_csv_fname, delimiter=DELIMITER):
-        writer, f = get_csv_dict_writer(out_csv_fname, CSV_FIELDS, delimiter)
+    def write_csv_data(self, out_csv_fname, header=CSV_FIELDS, delimiter=DELIMITER):
+        # Overwrite existing, make directories if needed
+        ready_filename(out_csv_fname, overwrite=True)
+        # Get a dictionary writer and write header
+        writer, f = get_csv_dict_writer(out_csv_fname, header, delimiter)
+        # Write every record
         try:
             for _, meta in self.all_data[ADK.IMAGE_META].items():
                 try:

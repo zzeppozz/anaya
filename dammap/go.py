@@ -3,7 +3,8 @@ import argparse
 import os
 import time
 
-from dammap.common.constants import IN_DIR, OUT_DIR, THUMB_DIR
+from dammap.common.constants import (
+    IN_DIR, OUT_DIR, THUMB_DIR, CSV_FIELDS, CSV_FIELDS_SMALL)
 from dammap.common.util import (fix_names_in_tree, get_logger, test_names_in_tree)
 from transform.dam_map import PicMapper
 
@@ -12,6 +13,7 @@ shp_flag = False
 
 # ...............................................
 if __name__ == "__main__":
+    is_dev = False
     MAC_PATH = '/Users/aimeestewart/Library/Mobile Documents/com~apple~CloudDocs/Documents/Home/Anaya/anaya_map'
     BASE_PATH = '/tank/anaya/'
     maxY = 35.45045
@@ -61,19 +63,27 @@ if __name__ == "__main__":
     print('Read filenames {}_{}_{} {}:{}:{}'.format(
         t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))
 
-    # Updates all images in the dictionary from the referenced files
-    pm.read_data_from_image_files()
-    t = time.localtime()
-    print('Read image files {}_{}_{} {}:{}:{}'.format(
-        t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))
+    if is_dev is True:
+        header = CSV_FIELDS_SMALL
+    else:
+        # Updates all images in the dictionary from the referenced files
+        pm.read_data_from_image_files()
+        header = CSV_FIELDS
+        t = time.localtime()
+        print('Read image files {}_{}_{} {}:{}:{}'.format(
+            t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))
+        # Test that we have the expected number of records
+        print('Testing results after reading image metadata')
+        pm.test_counts()
 
     orig_all_data = pm.all_data
-    pm.write_csv_data(csv_fname)
+    pm.write_csv_data(csv_fname, header=header)
     pm.read_csv_data(csv_fname)
     # pm.compare_all_data(orig_all_data)
 
     # Test that we have the expected number of records
-    pm.test_filename_counts()
+    print('Testing results after reading CSV metadata')
+    pm.test_counts()
     t = time.localtime()
     print('End {}_{}_{} {}:{}:{}'.format(
         t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))

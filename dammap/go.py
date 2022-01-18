@@ -75,6 +75,7 @@ if __name__ == "__main__":
         # Test that we have the expected number of records
         print('Testing results after reading image metadata')
         pm.test_counts()
+        pm.create_shapefile_kml(shpfname=shp_fname)
 
     orig_all_data = pm.all_data
     pm.write_csv_data(csv_fname, header=header)

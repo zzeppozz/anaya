@@ -367,7 +367,7 @@ class PicMapper(object):
             
             
     # ...............................................
-    def create_shapefile_kml(self, shpfname, kmlfname, img_data):
+    def create_shapefile_kml(self, shpfname=None, kmlfname=None):
         kmlf = dataset = lyr = None
         # Open one or both
         if kmlfname is not None:
@@ -378,8 +378,8 @@ class PicMapper(object):
             dataset, lyr = self._create_layer(self.FIELDS, shpfname)
 
         # Iterate through features one time writing elements to each requested file
-        for relfname, damdata in img_data.iteritems():
-            if damdata['in_bounds'] is True:
+        for relfname, damdata in self.all_data[ADK.IMAGE_META].iteritems():
+            if damdata[IK.IN_BNDS] == 1:
                 rel_thumbfname = os.path.join(THUMB_DIR, relfname)
                 if kmlf:
                     self._create_lookat_kml(kmlf, rel_thumbfname, damdata)
@@ -423,7 +423,7 @@ class PicMapper(object):
         return (yr, mo, day), dd, xdms, ydms
     
     # ...............................................
-    def eval_extent(self, x: float, y: float) -> bool:
+    def eval_extent(self, x: float, y: float) -> int:
         """Return 1 if point is within bbox, 0 if outside."""
         in_bounds = 1
         # in assigned bbox (min_x, min_y, max_x, max_y)?
@@ -493,7 +493,7 @@ class PicMapper(object):
                     if key in (IK.IMG_DATE, IK.DAM_DATE):
                         rec[key] = self._parse_datestring(csvrec[key])
                     elif key == IK.IN_BNDS:
-                        rec[IK.IN_BNDS] = bool(csvrec[IK.IN_BNDS])
+                        rec[IK.IN_BNDS] = int(csvrec[IK.IN_BNDS])
                     else:
                         rec[key] = csvrec[key]
 
@@ -502,7 +502,7 @@ class PicMapper(object):
                 arroyo_name = rec[IK.ARROYO_NAME]
 
                 # Count images with good geo data
-                if rec[IK.WKT].startswith('Point') and rec[IK.IN_BNDS]:
+                if rec[IK.WKT].startswith('Point') and rec[IK.IN_BNDS] == 1:
                     # Save metadata for each image
                     img_meta[relfname] = rec
                     img_count_geo += 1
@@ -566,7 +566,6 @@ class PicMapper(object):
                 if not fname.startswith(".") and fname.lower().endswith("jpg"):
                     self.all_data[ADK.IMG_COUNT] += 1
                     fullfname = os.path.join(root, fname)
-                    self._logger.info('Parsing {} ...'.format(fullfname))
 
                     # Get metadata from directory and filename
                     relfname = fullfname[start_idx:]
@@ -611,7 +610,6 @@ class PicMapper(object):
 
                 # Read metadata from image file
                 fullfname = os.path.join(self.image_path, relfname)
-                self._logger.info('Reading metadata from {} ...'.format(fullfname))
                 img_date, xydd, xdms, ydms = self.get_image_metadata(fullfname)
 
                 # Test geodata
@@ -620,7 +618,7 @@ class PicMapper(object):
                 if ydms:
                     (ydeg, ymin, ysec, ydir) = ydms
                 if xydd is None:
-                    in_bounds = False
+                    in_bounds = 0
                     self._logger.warn('Failed to return decimal degrees for {}'.format(relfname))
                 else:
                     lon = xydd[0]

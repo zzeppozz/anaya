@@ -48,7 +48,7 @@ def get_logger(outpath):
 
 
 # .............................................................................
-def _parse_filename(basename):
+def _format_filename(basename):
     name = ""
     year = ""
     mon = ""
@@ -107,7 +107,7 @@ def fix_name(name, ext=None):
     newname = ''.join(newchars)
     # Parse date and number from filenames, then re-concatenate extension
     if ext is not None:
-        newname = _parse_filename(newname)
+        newname = _format_filename(newname)
         newname += ext
     return newname
 
@@ -138,13 +138,15 @@ def fix_names_in_tree(inpath, do_files=False):
                         print(" *** Badname {} --> {}".format(fname, newname))
                     old_filename = os.path.join(root, fname)
                     new_filename = os.path.join(root, newname)
-                    # test before rename
+                    # Test before rename
                     rel_fname = new_filename[start:]
-                    arroyo_num, arroyo_name, name, [yr, mo, dy], picnum = parse_relative_fname(rel_fname)
-                    if None in (arroyo_num, arroyo_name, name, yr, mo, dy, picnum):
+                    arroyo_num, arroyo_name, name, date_lst, picnum = parse_relative_fname(rel_fname)
+                    if (None in (arroyo_num, arroyo_name, name, picnum)
+                            or len(date_lst) < 2):
                         print("Stop me now! {}".format(rel_fname))
-                    os.rename(old_filename, new_filename)
-                    print("{} --> {}".format(fname, newname))
+                    else:
+                        os.rename(old_filename, new_filename)
+                        print("Rename {} --> {}".format(fname, newname))
 
 # ...............................................
 def parse_relative_fname(relfname):
@@ -152,31 +154,62 @@ def parse_relative_fname(relfname):
 
     Args:
         relfname (str): relative filename containing parent directory and filename
+
+    Returns:
+        arroyo_num (str): integer/number of the arroyo
+        arroyo_name (str): name of the arroyo
+        dam_name (str): name of the dam
+        dam_date (list): list of digit-strings, (yyyy, mm, dd)
+        picnum (int): integer/number of the photo
     """
-    arroyo_num = arroyo_name = name = yr = mo = dy = picnum = None
+    arroyo_num = arroyo_name = dam_name = dam_date = picnum = None
     try:
         dirname, fname = relfname.split(os.sep)
     except ValueError:
         print('Relfname {} does not parse into 2'.format(relfname))
-        return arroyo_num, arroyo_name, name, [yr, mo, dy], picnum
-    try:
-        arroyo_num, arroyo_name = dirname.split(SEPARATOR)
-    except ValueError:
-        print('Dirname {} does not parse into 2'.format(dirname))
-        return arroyo_num, arroyo_name, name, [yr, mo, dy], picnum
+    else:
+        try:
+            arroyo_num, arroyo_name = dirname.split(SEPARATOR)
+        except ValueError:
+            print('Dirname {} does not parse into 2'.format(dirname))
+        else:
+            basename, ext = os.path.splitext(fname)
+            try:
+                dam_name, fulldate, picnum = basename.split(SEPARATOR)
+            except ValueError:
+                print('Basename {} does not parse into 3'.format(basename))
+            else:
+                tmp = fulldate.split("-")
 
-    basename, ext = os.path.splitext(fname)
-    try:
-        name, fulldate, num = basename.split(SEPARATOR)
-    except ValueError:
-        print('Basename {} does not parse into 3'.format(basename))
-        return arroyo_num, arroyo_name, name, [yr, mo, dy], picnum
-    try:
-        yr, mo, day = fulldate.split("-")
-    except ValueError:
-        print('Fulldate {} does not parse into 3'.format(fulldate))
+                try:
+                    dam_date = tuple([int(d) for d in tmp])
+                except TypeError:
+                    print('Date {} does not parse into 3'.format(fulldate))
+                else:
+                    if len(dam_date) != 3:
+                        print('Date {} does not parse into 3'.format(dam_date))
 
-    return arroyo_num, arroyo_name, name, [yr, mo, dy], picnum
+    return arroyo_num, arroyo_name, dam_name, dam_date, picnum
+
+# ...............................................
+def test_names_in_tree(inpath):
+    """Tests filenames in a 2-level directory tree.
+
+    Args:
+        inpath (str): base directory
+    """
+    start = len(inpath) + 1
+    for root, dirlist, files in os.walk(inpath):
+        for fname in files:
+            if not fname.startswith(".") and fname.lower().endswith("jpg"):
+                full_fname = os.path.join(root, fname)
+                rel_fname = full_fname[start:]
+                arroyo_num, arroyo_name, name, date_lst, picnum = parse_relative_fname(rel_fname)
+                print("Relative filename {} parses to: ".format(rel_fname))
+                print("   Arroyo: {} {}".format(arroyo_num, arroyo_name))
+                print("   Dam:    {}, {}-{}-{}, {}".format(
+                    name, date_lst[0], date_lst[1], date_lst[2], picnum))
+
 
 # .............................................................................
 def logit(log, msg):
@@ -291,6 +324,39 @@ def get_csv_dict_reader(datafile, delimiter, fieldnames=None):
     else:
         print('Opened file {} for dict read'.format(datafile))
     return dreader, f
+
+
+# .............................................................................
+def get_csv_dict_writer(csvfile, header, delimiter, fmode="w"):
+    """Create a CSV dictionary writer and write the header.
+
+    Args:
+        csvfile: output CSV file for writing
+        header: header for output file
+        delimiter: field separator
+        fmode: Write ('w') or append ('a')
+
+    Returns:
+        writer (csv.DictWriter) ready to write
+        f (file handle)
+
+    Raises:
+        Exception: on invalid file mode
+        Exception: on failure to create a DictWriter
+    """
+    if fmode not in ("w", "a"):
+        raise Exception("File mode must be 'w' (write) or 'a' (append)")
+
+    csv.field_size_limit(sys.maxsize)
+    try:
+        f = open(csvfile, fmode, newline="", encoding='utf-8')
+        writer = csv.DictWriter(f, fieldnames=header, delimiter=delimiter)
+    except Exception as e:
+        raise e
+    else:
+        writer.writeheader()
+        print("Opened file {} and wrote header".format(csvfile))
+    return writer, f
 
 
 # .............................................................................

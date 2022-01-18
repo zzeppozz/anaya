@@ -1,38 +1,14 @@
 """Process Anaya dam photographs and create CSV, shapefile, and KML file for display."""
 import argparse
 import os
+import time
 
 from dammap.common.constants import IN_DIR, OUT_DIR, THUMB_DIR
-from dammap.common.util import fix_names_in_tree, parse_relative_fname, get_logger
+from dammap.common.util import (fix_names_in_tree, get_logger, test_names_in_tree)
 from transform.dam_map import PicMapper
 
 kml_flag = False
 shp_flag = False
-
-# ...............................................
-def fix_directory_filenames(inpath):
-    # Fix directories first
-    fix_names_in_tree(inpath, do_files=False)
-    # Fix filenames and test parsing before write
-    fix_names_in_tree(inpath, do_files=True)
-
-# ...............................................
-def test_names_in_tree(inpath):
-    """Tests filenames in a 2-level directory tree.
-
-    Args:
-        inpath (str): base directory
-    """
-    start = len(inpath) + 1
-    for root, dirlist, files in os.walk(inpath):
-        for fname in files:
-            if not fname.startswith(".") and fname.lower().endswith("jpg"):
-                full_fname = os.path.join(root, fname)
-                rel_fname = full_fname[start:]
-                arroyo_num, arroyo_name, name, [yr, mo, dy], picnum = parse_relative_fname(rel_fname)
-                print("Relative filename {} parses to: ".format(rel_fname))
-                print("   Arroyo: {} {}".format(arroyo_num, arroyo_name))
-                print("   Dam:    {}, {}-{}-{}, {}".format(name, yr, mo, dy, picnum))
 
 # ...............................................
 if __name__ == "__main__":
@@ -57,9 +33,12 @@ if __name__ == "__main__":
     outpath = os.path.join(BASE_PATH, OUT_DIR)
     resize_path = os.path.join(outpath, THUMB_DIR)
 
-    # Correct input file and directory names
-    # fix_directory_filenames(inpath)
-    test_names_in_tree(inpath)
+    # # Fix directories first
+    # fix_names_in_tree(inpath, do_files=False)
+    # # Fix filenames and test parsing before write
+    # fix_names_in_tree(inpath, do_files=True)
+    # # Test file and directories before further action
+    # test_names_in_tree(inpath)
 
     # Define output filenames
     base_fname = os.path.join(outpath, 'anaya_dams')
@@ -68,21 +47,42 @@ if __name__ == "__main__":
     kml_fname = '{}.kml'.format(base_fname)
     logger = get_logger(outpath)
 
-    # pm = PicMapper(
-    #     inpath, buffer_distance=dam_buffer, bbox=bbox, shp_fname=shp_fname,
-    #     kml_fname=None, logger=logger)
-    #
-    # # Read or read/write data
-    # all_data = pm.read_image_data(csv_fname)
-    #
-    # imageData = pm.process_all_images(resize_width=500, resize_path=resize_path)
-    #
-    # print('Given: {} {} {} {}'.format(pm.bbox[0], pm.bbox[1], pm.bbox[2], pm.bbox[3]))
-    # print('Computed: '.format(pm._minX, pm._minY, pm._maxX, pm._maxY))
-    #
-    # # Reduce image sizes
-    # t = time.localtime()
-    # stamp = '{}_{}_{}-{}_{}'.format(t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min)
+    pm = PicMapper(
+        inpath, buffer_distance=dam_buffer, bbox=bbox, shp_fname=shp_fname,
+        kml_fname=None, logger=logger)
+
+    t = time.localtime()
+    print('Start {}_{}_{} {}:{}:{}'.format(
+        t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))
+
+    # Sets all_data dictionary on object
+    pm.read_metadata_from_directory()
+    t = time.localtime()
+    print('Read filenames {}_{}_{} {}:{}:{}'.format(
+        t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))
+
+    # Updates all images in the dictionary from the referenced files
+    pm.read_data_from_image_files()
+    t = time.localtime()
+    print('Read image files {}_{}_{} {}:{}:{}'.format(
+        t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))
+
+    orig_all_data = pm.all_data
+    pm.write_csv_data(csv_fname)
+    pm.read_csv_data(csv_fname)
+    # pm.compare_all_data(orig_all_data)
+
+    # Test that we have the expected number of records
+    pm.test_filename_counts()
+    t = time.localtime()
+    print('End {}_{}_{} {}:{}:{}'.format(
+        t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))
+
+    # # Write smaller images and save to all_data dictionary
+    # pm.resize_images(resize_width=500, resize_path=resize_path)
+
+    print('Given: {}'.format(pm.bbox))
+    print('Computed: {}'.format(pm.bounds))
 
 """
 

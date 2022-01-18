@@ -6,19 +6,21 @@ from PIL import Image
 import time
 
 from dammap.common.util import (
-    get_csv_dict_reader, get_logger, logit, ready_filename, reduce_image_size)
+    get_csv_dict_reader, get_csv_dict_writer, parse_relative_fname,
+    get_logger, logit, ready_filename, reduce_image_size)
+
 from dammap.common.constants import (
     GEOM_WKT, LONG_FLD, LAT_FLD, IMG_META, DELIMITER, SEPARATOR, IN_DIR, ANC_DIR,
-    THUMB_DIR, OUT_DIR, SAT_FNAME, RESIZE_WIDTH, IMAGES_KEY, CSV_FIELDS)
+    THUMB_DIR, OUT_DIR, SAT_FNAME, RESIZE_WIDTH, ARROYO_COUNT, IMAGE_COUNT, CSV_FIELDS)
+
+from dammap.common.constants import ALL_DATA_KEYS as ADK
+from dammap.common.constants import IMAGE_KEYS as IK
 
 # DELETE_CHARS = ['\'', ',', '"', ' ', '(', ')', '_']
 
 # .............................................................................
 class PicMapper(object):
-# .............................................................................
-    """
-    Class to write a shapefile from GBIF CSV output or BISON JSON output 
-    export p3=/Library/Frameworks/Python.framework/Versions/3.7/bin/python3.7
+    """Read a directory of image files, and create geospatial files for mapping them.
     Yelp help: https://engineeringblog.yelp.com/2017/06/making-photos-smaller.html
     """
     FIELDS = [('arroyo', ogr.OFTString), 
@@ -51,10 +53,14 @@ class PicMapper(object):
             buffer_distance: Buffer in which coordinates are considered to be the same location
             bbox: Bounds of the output data, in (min_x, min_y, max_x, max_y) format.  Outside these
                 bounds, images will be discarded
+            shp_fname (str): optional name for output shapefile(s)
+            kml_fname (str): optional name for output kml file
+            logger (object): logger for error logging
         """
         self.base_path, _ = os.path.split(image_path)
         self.image_path = image_path
         self.buffer_distance = buffer_distance
+        # Given bounds
         self.bbox = bbox
         # Compute actual bounds of the data
         self._min_x = bbox[0]
@@ -65,63 +71,10 @@ class PicMapper(object):
             logger = get_logger(os.path.join(self.base_path, OUT_DIR))
         self._logger = logger
 
-    # # ...............................................
-    # def _clean_name(self, name):
-    #     """Remove non-ascii and other special characters; replace first right paren with underscore"""
-    #     tmpchars = []
-    #     idx = name.index(RPAREN)
-    #     tmp_name = name[0:idx] + '_' + name[idx+1:]
-    #     for ch in tmp_name:
-    #         if ch.isascii() and ch not in DELETE_CHARS:
-    #             tmpchars.append(ch)
-    #     new_name = ''.join(tmpchars)
-    #     return new_name
-    #
-    # # ...............................................
-    # def _standardize_name(self, filename, fullpath):
-    #     date_str = num_str = '?'
-    #     _, arroyo_dir = os.path.split(fullpath)
-    #     new_arroyo_dir = self._clean_name(arroyo_dir)
-    #     arroyo_num, arroyo_name = new_arroyo_dir.split('_')
-    #
-    #     # Fix missing extensions manually
-    #     basename, ext = os.path.splitext(filename)
-    #     if ext == '':
-    #         logit(self._logger, 'Missing extension in {}, dir {}'.format(filename, fullpath))
-    #         ext = '.JPG'
-    #
-    #     # Find first number in filename, indicating start of date/time string
-    #     for i in range(len(basename)):
-    #         try:
-    #             int(basename[i])
-    #             break
-    #         except:
-    #             pass
-    #     name = basename[:i]
-    #     rest = basename[i:]
-    #     new_name = self._clean_name(name)
-    #     # Date time parts split by underscore
-    #     parts = rest.split('_')
-    #     if len(parts) == 2:
-    #         date_str, num_str = parts
-    #     # or not
-    #     elif len(parts) == 1:
-    #         date_str = parts[0][:8]
-    #         num_str = parts[0][8:]
-    #     else:
-    #         logit(self._logger, '** Bad filename {}'.format(filename))
-    #
-    #     try:
-    #         new_filename = '{}_{}_{}{}'.format(new_name, date_str, num_str, ext)
-    #     except:
-    #         new_filename = filename
-    #
-    #     picnum = int(num_str)
-    #     yr = int(date_str[:4])
-    #     mo = int(date_str[4:6])
-    #     dy = int(date_str[6:8])
-    #
-    #     return new_filename, name, picnum, (yr, mo, dy), (arroyo_num, arroyo_name)
+    # ...............................................
+    @property
+    def bounds(self):
+        return (self._min_x, self._min_y, self._max_x, self._max_y)
 
     # ...............................................
     def _get_date(self, tags):
@@ -414,7 +367,7 @@ class PicMapper(object):
         kmlf = dataset = lyr = None
         # Open one or both
         if kmlfname is not None:
-            ready_filename(kml_fname)
+            ready_filename(kmlfname)
             kmlf = self._open_kml_file(kmlfname)
         if shpfname is not None:
             ready_filename(shpfname)
@@ -435,8 +388,7 @@ class PicMapper(object):
         if dataset:
             dataset.Destroy()
             self._logger.info('Closed/wrote dataset {}'.format(shpfname))
-    
-    
+
     # ...............................................
     def get_image_metadata(self, fullname):
         tags = dd = xdms = ydms = yr = mo = day = None
@@ -509,76 +461,6 @@ class PicMapper(object):
         return (self._min_x, self._min_y, self._max_x, self._max_y)
 
     # ...............................................
-    def parse_filename(self, root, fname):
-        name = ''
-        dt = ''
-        count = ''
-        oncount = False
-        _, arroyo = os.path.split(root)
-        arroyo_num, arroyo_name = arroyo.split(')')
-        for ch in fname:
-            try:
-                int(ch)
-                if oncount:
-                    count += ch
-                else:
-                    dt += ch
-            except:
-                if ch == '_':
-                    oncount = True
-                else:
-                    name += ch
-        year = int(dt[:4])
-        picnum = int(count)
-        return arroyo_num, arroyo_name, name, year, picnum    
-
-    # ...............................................
-    def process_all_images(self, resize_width=RESIZE_WIDTH, resize_path=None):
-        """
-        {arroyo_name: {num: <arroyo_num>, fullname: ([yr, mo, day], dd, xdms, ydms),
-                                          ...
-                                          fullname: ([yr, mo, day], dd, xdms, ydms)}
-        }
-        """
-        image_data = {}
-        for root, _, files in os.walk(self.image_path):
-            for fname in files:
-                if fname.endswith('jpg') or fname.endswith('JPG'): 
-                    orig_fname = os.path.join(root, fname)
-                    
-                    (_, name, picnum, (fyear, fmon, fday), 
-                     (arroyo_num, arroyo_name)) = self._standardize_name(fname, root)
-                        
-                    try:
-                        image_data[arroyo_name]['num'] = arroyo_num
-                    except:
-                        image_data[arroyo_name] = {'num': arroyo_num}
-                    # if not image_data.has_key(arroyo_name):
-                    #     image_data[arroyo_name] = {'num': arroyo_num}
-                    # else:
-                    #     image_data[arroyo_name]['num'] = arroyo_num
-                        
-                    [yr, mo, day], dd, xdms, ydms = self.get_image_metadata(orig_fname)
-                    if dd is None:
-                        return {}
-                    
-                    in_bounds = self.eval_extent(dd[0], dd[1])
-                    if resize_path is not None:
-                        # includes trailing /
-                        rel_fname = orig_fname[len(self.image_path):]
-                        resize_fname = resize_path + rel_fname
-                        reduce_image_size(
-                            orig_fname, resize_fname, width=RESIZE_WIDTH, 
-                            sample_method=Image.ANTIALIAS)
-                        image_data[arroyo_name][resize_fname] = (
-                            [yr, mo, day], dd, xdms, ydms)
-                    else:
-                        image_data[arroyo_name][resize_fname] =  (
-                            [yr, mo, day], dd, xdms, ydms)
-                        
-        return image_data    
-    
-    # ...............................................
     def _parse_datestring(self, dtstr):
         parts = dtstr.lstrip('([').rstrip('])').split(',')
         try:
@@ -588,32 +470,40 @@ class PicMapper(object):
         return date_vals
         
     # ...............................................
-    def read_data_from_file(self, csv_fname, delimiter=DELIMITER):
-        all_data = {}
+    def read_csv_data(self, csv_fname, delimiter=DELIMITER):
+        start_idx = len(self.image_path) + 1
+        self.all_data = {}
         arroyos = {}
         img_meta = {}
         img_out_of_range = {}
-        img_count = 0
+        img_count_total = 0
         img_count_geo = 0
-        drdr, f = get_csv_dict_reader(csv_fname, delimiter)
+        reader, f = get_csv_dict_reader(csv_fname, delimiter)
         try:
-            for rec in drdr:
-                img_count += 1
-                fullfname = rec['fullpath']
-                relfname = fullfname[len(self.image_path)+1:]
-                arroyo_name = rec['arroyo']
-                rec['img_date'] = self._parse_datestring(rec['img_date'])
-                rec['dam_date'] = self._parse_datestring(rec['dam_date'])
-                rec['in_bounds'] = bool(rec['in_bounds'])
-                
+            for csvrec in reader:
+                rec = {}
+                img_count_total += 1
+                # Copy all vals, parsing dates and bool
+                for key, val in csvrec.items():
+                    if key in (IK.IMG_DATE, IK.DAM_DATE):
+                        rec[key] = self._parse_datestring(csvrec[key])
+                    elif key == IK.IN_BNDS:
+                        rec[IK.IN_BNDS] = bool(csvrec[IK.IN_BNDS])
+                    else:
+                        rec[key] = csvrec[key]
+
+                # Use relative filename and arroyo name as keys
+                relfname = rec[IK.FILE_PATH][start_idx:]
+                arroyo_name = rec[IK.ARROYO_NAME]
+
                 # Count images with good geo data
-                if rec[GEOM_WKT].startswith('Point') and rec['in_bounds']:
+                if rec[GEOM_WKT].startswith('Point') and rec[IK.IN_BNDS]:
+                    # Save metadata for each image
+                    img_meta[relfname] = rec
                     img_count_geo += 1
                 else:
                     img_out_of_range[relfname] = rec
-                    
-                # Save metadata for each image  
-                img_meta[relfname] = rec
+
                 # Summarize arroyos
                 try:
                     arroyos[arroyo_name].append(relfname)
@@ -622,27 +512,25 @@ class PicMapper(object):
         except Exception as e:
             self._logger.error(
                 'Failed to read image metadata from {}, line {}, {}'.format(
-                    csv_fname, drdr.line_num, e))
+                    csv_fname, reader.line_num, e))
         finally:
             f.close()
-            
-        all_data['arroyo_count'] = len(arroyos.keys())
-        all_data['arroyos'] = arroyos
-        all_data[IMAGES_KEY] = img_meta
-        all_data['img_count'] = img_count
-        all_data['img_count_geo'] = img_count_geo
-        all_data['out_of_range'] = img_out_of_range
 
-        return all_data
+        self.all_data[ADK.ARROYO_COUNT] = len(arroyos.keys())
+        self.all_data[ADK.ARROYO_META] = arroyos
+        self.all_data[ADK.IMAGE_META] = img_meta
+        self.all_data[ADK.OUT_OF_RANGE] = img_out_of_range
+        self.all_data[ADK.IMG_COUNT] = img_count_total
+        self.all_data[ADK.IMG_GEO_COUNT] = img_count_geo
 
-    # ...............................................
-    def _read_image_data(self, csv_fname):
-        if os.path.exists(csv_fname):
-            all_data = self.read_data_from_file(csv_fname)
-        else:
-            all_data = self.read_data_from_images(csv_fname)
-            pm.write_csv_data(csv_fname, all_data[IMAGES_KEY])
-        return all_data
+    # # ...............................................
+    # def read_image_metadata(self, csv_fname):
+    #     if os.path.exists(csv_fname):
+    #         all_data = self.read_data_from_file(csv_fname)
+    #     else:
+    #         all_data = self.read_data_from_image_files(csv_fname)
+    #         pm.write_csv_data(csv_fname, all_data['img_meta'])
+    #     return all_data
 
     # ...............................................
     def test_extent(self, bbox):
@@ -652,136 +540,184 @@ class PicMapper(object):
         self._logger.info('Computed: {}'.format(pm.extent))
 
     # ...............................................
-    def read_data_from_images(self, csv_fname):
-        """Read metadata from all image files within the BASE_PATH """
-        all_data = {'BASE_PATH': BASE_PATH,
-                    'arroyos': None,
-                    'img_count': None,
-                    'img_count_geo': None,
-                    'dam_count': None,
-                    'dam_count_geo': None,
-                    IMAGES_KEY: []}
+    def read_metadata_from_directory(self):
+        """Read metadata from the directory names and filenames within image_path.
+
+        Results in:
+            all_data dictionary with keys/values:
+            'BASE_PATH': base path containing input and output directories
+            'arroyos': {arroyo_name: [rel_fname] ...}
+            'img_count': number of images
+            'img_count_geo': number of georeferenced images
+            'images': {rel_fname: {image_metadata} ...}
+        """
+        start_idx = len(self.image_path) + 1
+        self.all_data = {
+            ADK.BASE_PATH: self.base_path,
+            ADK.ARROYO_META: {},
+            ADK.IMAGE_META: {},
+            ADK.IMG_COUNT: 0
+        }
         arroyos = {}
-        img_meta = {}
-        img_count = 0
         img_count_geo = 0
         for root, _, files in os.walk(self.image_path):
             for fname in files:
-                if fname.endswith('jpg') or fname.endswith('JPG'):
-                    img_count += 1
+                # Read only non-hidden jpg files
+                if not fname.startswith(".") and fname.lower().endswith("jpg"):
+                    self.all_data[ADK.IMG_COUNT] += 1
                     fullfname = os.path.join(root, fname)
-                    relfname = fullfname[len(self.image_path)+1:]
-                    xdeg = xmin = xsec = xdir = ydeg = ymin = ysec = ydir = ''
-                    lon = lat = wkt = ''
-                    self._logger.info('Reading {} ...'.format(fullfname))
-    
-                    _, dam_name, picnum, dam_date, (arroyo_num, arroyo_name) = \
-                        self._standardize_name(fname, root)
-                    img_date, xydd, xdms, ydms = self.get_image_metadata(fullfname)
-                    
-                    if xdms is not None:
-                        (xdeg, xmin, xsec, xdir) = xdms
-                    if ydms is not None:
-                        (ydeg, ymin, ysec, ydir) = ydms
-                    if xydd is None:
-                        in_bounds = False
-                        self._logger.warn('Failed to return decimal degrees for {}'.format(relfname))
-                    else:
-                        lon = xydd[0]
-                        lat = xydd[1]
-                        wkt = 'Point ({:.7f}  {:.7f})'.format(lon, lat)
-                        img_count_geo += 1
-                        in_bounds = self.eval_extent(lon, lat)
-                                
-                    img_meta[relfname] = {'arroyo': arroyo_name, 
-                                          'arroyo_num': arroyo_num,
-                                          'dam': dam_name,
-                                          'dam_num': picnum,
-                                          'dam_date': dam_date,
-                                          'img_date': img_date,
-                                          LONG_FLD: lon,
-                                          LAT_FLD: lat,
-                                          GEOM_WKT: wkt,
-                                          'xdirection': xdir,
-                                          'xdegrees': xdeg,
-                                          'xminutes': xmin, 
-                                          'xseconds': xsec,
-                                          'ydirection': ydir,
-                                          'ydegrees': ydeg,
-                                          'yminutes': ymin,
-                                          'yseconds': ysec,
-                                          'fullpath': fullfname,
-                                          'in_bounds': in_bounds}
-                    try:
-                        arroyos[arroyo_name].append(relfname)
-                    except:
-                        arroyos[arroyo_name] = [relfname]
-#                     self._logger('  Read {}'.format(fullfname))
+                    self._logger.info('Parsing {} ...'.format(fullfname))
 
-        all_data['arroyo_count'] = len(arroyos.keys())
-        all_data['arroyos'] = arroyos
-        all_data[IMAGES_KEY] = img_meta
-        all_data['img_count'] = img_count
-        all_data['img_count_geo'] = img_count_geo
-        return all_data
-    
-    # ...............................................
-    def write_csv_data(self, out_csv_fname, img_data, delimiter=DELIMITER):
-        with open(out_csv_fname, 'wb') as csvfile:
-            csvwriter = csv.writer(csvfile, delimiter=delimiter)
-            csvwriter.writerow(CSV_FIELDS)
-            for relfname, meta in img_data.iteritems():
-                rec = []
-                for fld in CSV_FIELDS:
-                    try:
-                        rec.append(meta[fld])
-                    except:
-                        rec.append('')
-                csvwriter.writerow(rec)
+                    # Get metadata from directory and filename
+                    relfname = fullfname[start_idx:]
+                    (arroyo_num, arroyo_name, dam_name, dam_date, picnum
+                     ) = parse_relative_fname(relfname)
 
+                    # Add image metadata to image_meta dict
+                    self.all_data[ADK.IMAGE_META][relfname] = {
+                        IK.FILE_PATH: fullfname,
+                        IK.ARROYO_NAME: arroyo_name,
+                        IK.ARROYO_NUM: arroyo_num,
+                        IK.DAM_NAME: dam_name,
+                        IK.DAM_NUM: picnum,
+                        IK.DAM_DATE: dam_date}
+
+                    # Add image filename to arroyo_meta dict
+                    try:
+                        self.all_data[ADK.ARROYO_META][arroyo_name].append(relfname)
+                    except:
+                        self.all_data[ADK.ARROYO_META][arroyo_name] = [relfname]
+        self.all_data[ADK.ARROYO_COUNT] = len(arroyos.keys())
+
+    # # ...............................................
+    # def compare_all_data(self, other_data):
+    #     for akey, aval in self.all_data.items():
+    #         if other_data[akey] ==
 
     # ...............................................
-    def resize_images(self, resize_path, image_data, resize_width=RESIZE_WIDTH):
-        """
-        {arroyo_name: {num: <arroyo_num>, fullname: ([yr, mo, day], dd, xdms, ydms),
-                                          ...
-                                          fullname: ([yr, mo, day], dd, xdms, ydms)}
-        }
-        """
-        if resize_path.endswith('/'):
-            resize_path = resize_path[:-1]
+    def read_data_from_image_files(self):
+        """Read metadata from all image files within the BASE_PATH """
+        start_idx = len(self.image_path) + 1
+        img_meta = {}
+        img_count_geo = 0
+        if not self.all_data:
+            self.read_metadata_from_directory()
 
-        for root, _, files in os.walk(self.image_path):
+        for arroyo, rfn_lst in self.all_data[ADK.ARROYO_META].items():
+            # Check each image in arroyo
+            for relfname in rfn_lst:
+                xdeg = xmin = xsec = xdir = ydeg = ymin = ysec = ydir = lon = lat = wkt = ''
+                curr_image = self.all_data[ADK.IMAGE_META][relfname]
+
+                # Read metadata from image file
+                fullfname = os.path.join(self.image_path, relfname)
+                self._logger.info('Reading metadata from {} ...'.format(fullfname))
+                img_date, xydd, xdms, ydms = self.get_image_metadata(fullfname)
+
+                # Test geodata
+                if xdms:
+                    (xdeg, xmin, xsec, xdir) = xdms
+                if ydms:
+                    (ydeg, ymin, ysec, ydir) = ydms
+                if xydd is None:
+                    in_bounds = False
+                    self._logger.warn('Failed to return decimal degrees for {}'.format(relfname))
+                else:
+                    lon = xydd[0]
+                    lat = xydd[1]
+                    wkt = 'Point ({:.7f}  {:.7f})'.format(xydd[0], xydd[1])
+                    img_count_geo += 1
+                    in_bounds = self.eval_extent(lon, lat)
+
+                curr_image[IK.IMG_DATE] = img_date
+                curr_image[IK.LON] = lon
+                curr_image[IK.LAT] = lat
+                curr_image[IK.WKT] = wkt
+                curr_image[IK.X_DIR] = xdir
+                curr_image[IK.X_DEG] = xdeg
+                curr_image[IK.X_MIN] = xmin
+                curr_image[IK.X_SEC] = xsec
+                curr_image[IK.Y_DIR] = ydir
+                curr_image[IK.Y_DEG] = ydeg
+                curr_image[IK.Y_SEC] = ysec
+                curr_image[IK.Y_MIN] = ymin
+                curr_image[IK.IN_BNDS] = in_bounds
+        self.all_data[ADK.IMG_GEO_COUNT] = img_count_geo
+
+    # ...............................................
+    def test_filename_counts(self):
+        # Count the image files in the directory
+        fcount = dcount = 0
+        for root, dirs, files in os.walk(self.image_path):
             for fname in files:
-                if fname.endswith('jpg') or fname.endswith('JPG'): 
-                    orig_fname = os.path.join(root, fname)
-                    
-                    (_, name, picnum, [fname_yr, fname_mo, fname_day], 
-                     (arroyo_num, arroyo_name)) = self._standardize_name(fname, root)
-                    if not image_data.has_key(arroyo_name):
-                        image_data[arroyo_name] = {'num': arroyo_num}
-                    else:
-                        image_data[arroyo_name]['num'] = arroyo_num
-                        
-                    [yr, mo, day], dd, xdms, ydms = self.getImageMetadata(orig_fname)
-                    if dd is None:
-                        return {}
-                    
-                    self.eval_extent(dd[0], dd[1])
-                    if resize_path is not None:
-                        # includes trailing /
-                        rel_fname = orig_fname[len(self.image_path):]
-                        resize_fname = resize_path + rel_fname
-                        reduce_image_size(
-                            orig_fname, resize_fname, width=resize_width, 
-                            sample_method=Image.ANTIALIAS)
-                        image_data[arroyo_name][resize_fname] = (
-                            [yr, mo, day], dd, xdms, ydms)
-                    else:
-                        image_data[arroyo_name][resize_fname] = (
-                            [yr, mo, day], dd, xdms, ydms)
-                        
-        return image_data
+                if not fname.startswith(".") and fname.lower().endswith("jpg"):
+                    fcount += 1
+            for dirname in dirs:
+                if not dirname.startswith("."):
+                    dcount += 1
+        if not dcount == ARROYO_COUNT:
+            print('Failed to get the correct number of arroyos from the directory')
+        if not self.all_data[ADK.ARROYO_COUNT] == ARROYO_COUNT:
+            print('Failed to get the correct number of arroyos from the metadata')
+        if not fcount == IMAGE_COUNT:
+            print('Failed to get the correct number of images from the directory')
+        # Read into metadata
+        if not self.all_data:
+            self.read_data_from_image_files()
+        # Count the image files in the arroyos dictionary
+        count = 0
+        for ar, filelist in self.all_data[ADK.ARROYO_META].items():
+            for f in filelist:
+                count += 1
+        if not count == IMAGE_COUNT:
+            print('Failed to get the correct number of images from the arroyos metadata')
+        # Count the image files in the images dictionary
+        if not len(self.all_data['img_meta']) == IMAGE_COUNT:
+            print('Failed to get the correct number of images from the images metadata')
+
+
+    # ...............................................
+    def write_csv_data(self, out_csv_fname, delimiter=DELIMITER):
+        writer, f = get_csv_dict_writer(out_csv_fname, CSV_FIELDS, delimiter)
+        try:
+            for _, meta in self.all_data[ADK.IMAGE_META].items():
+                try:
+                    writer.writerow(meta)
+                except Exception as e:
+                    self._logger.error("Failed to write {}, {}".format(meta, e))
+        except Exception as e:
+            raise(e)
+        finally:
+            f.close()
+
+    # ...............................................
+    def resize_images(self, resize_path, resize_width=RESIZE_WIDTH):
+        """Resize all original images in the image_path tree.
+
+        Args:
+            resize_path (str): output path for resized images
+            resize_width (int): width in pixels for resized images
+        """
+        if not self.all_data:
+            self.read_data_from_image_files()
+        thumb_key = 'thumb_'.format(resize_width)
+        for arroyo, rfn_lst in self.all_data['arroyo'].items():
+            # Check each image in arroyo
+            for relfname in rfn_lst:
+                (arroyo_num, arroyo_name, dam_name, dam_date, picnum
+                 ) = parse_relative_fname(relfname)
+
+                # Get original file
+                orig_fname = os.path.join(self.image_path, relfname)
+                self._logger.info('Reading {} ...'.format(orig_fname))
+                # Get new filename
+                resize_fname = os.path.join(resize_path, relfname)
+                # Rewrite the image
+                reduce_image_size(
+                    orig_fname, resize_fname, width=resize_width,
+                    sample_method=Image.ANTIALIAS)
+                # Add resized file to metadata for original image file
+                self.all_data['img_meta'][relfname][thumb_key] = resize_fname
 
 
 # .............................................................................
@@ -796,43 +732,36 @@ if __name__ == '__main__':
     min_y = 35.42
     max_x = -106.04
     min_x = -106.08
-    
     dam_buffer = .00002
-    
-    image_path = os.path.join(BASE_PATH, IN_DIR)
-    out_path = os.path.join(BASE_PATH, OUT_DIR)
-    resize_path= os.path.join(out_path, THUMB_DIR)
-    
-    base_outfile = os.path.join(out_path, OUT_NAME)
-    csv_fname = '{}.csv'.format(base_outfile)
-    shp_fname = '{}.shp'.format(base_outfile)
-    kml_fname = None  #'{}.kml'.format(base_outfile)
 
-    bbox = (min_x, min_y, max_x, max_y)
-    
-    pm = PicMapper(image_path, buffer_distance=dam_buffer, bbox=bbox)
-      
-    # Read data
-    if os.path.exists(csv_fname):
-        all_data = pm.read_csv_metadata(csv_fname)
-    else:
-        all_data = pm.read_image_data()
-        logit(pm._logger, 'Given: {} {} {} {}'.format(pm.bbox[0], pm.bbox[1], pm.bbox[2], pm.bbox[3]))
-        logit(pm._logger, 'Computed: {}'.format(pm.extent))
-        pm.write_csv_data(csv_fname, all_data[IMAGES_KEY])
-  
-    img_data = all_data[IMAGES_KEY]
-    # Reduce image sizes
-    t = time.localtime()
-    stamp = '{}_{}_{}-{}_{}'.format(t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min)
- 
-    # Write smaller images
-    all_coords = pm.create_thumbnails(out_path, img_data, overwrite=False)
-    # Write data
-    pm.create_shapefile_kml(shp_fname, kml_fname, img_data)
-      
-
-
-'''
-
-'''
+#     image_path = os.path.join(BASE_PATH, IN_DIR)
+#     out_path = os.path.join(BASE_PATH, OUT_DIR)
+#     resize_path= os.path.join(out_path, THUMB_DIR)
+#
+#     base_outfile = os.path.join(out_path, OUT_NAME)
+#     csv_fname = '{}.csv'.format(base_outfile)
+#     shp_fname = '{}.shp'.format(base_outfile)
+#     kml_fname = None  #'{}.kml'.format(base_outfile)
+#
+#     bbox = (min_x, min_y, max_x, max_y)
+#
+#     pm = PicMapper(image_path, buffer_distance=dam_buffer, bbox=bbox)
+#
+#     # Read data
+#     if os.path.exists(csv_fname):
+#         all_data = pm.read_csv_data(csv_fname)
+#     else:
+#         all_data = pm.read_image_data()
+#         logit(pm._logger, 'Given: {} {} {} {}'.format(pm.bbox[0], pm.bbox[1], pm.bbox[2], pm.bbox[3]))
+#         logit(pm._logger, 'Computed: {}'.format(pm.extent))
+#         pm.write_csv_data(csv_fname, all_data['img_meta'])
+#
+#     img_data = all_data['img_meta']
+#     # Reduce image sizes
+#     t = time.localtime()
+#     stamp = '{}_{}_{}-{}_{}'.format(t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min)
+#
+#     # Write smaller images
+#     all_coords = pm.create_thumbnails(out_path, img_data, overwrite=False)
+#     # Write data
+#     pm.create_shapefile_kml(shp_fname, kml_fname, img_data)

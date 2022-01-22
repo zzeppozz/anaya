@@ -63,22 +63,18 @@ if __name__ == "__main__":
     print('Read filenames {}_{}_{} {}:{}:{}'.format(
         t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))
 
-    if is_dev is True:
-        header = CSV_FIELDS_SMALL
-    else:
-        # Updates all images in the dictionary from the referenced files
-        pm.read_data_from_image_files()
-        header = CSV_FIELDS
-        t = time.localtime()
-        print('Read image files {}_{}_{} {}:{}:{}'.format(
-            t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))
-        # Test that we have the expected number of records
-        print('Testing results after reading image metadata')
-        pm.test_counts()
-        pm.create_shapefile_kml(shpfname=shp_fname)
+    # Updates all images in the dictionary from the referenced files
+    pm.read_data_from_image_files()
+    pm.write_csv_data(csv_fname, header=CSV_FIELDS)
+    pm.write_shapefile_kml(shpfname=shp_fname)
+    t = time.localtime()
+    print('Read image files {}_{}_{} {}:{}:{}'.format(
+        t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))
+    # Test that we have the expected number of records
+    print('Testing results after reading image metadata')
+    pm.test_counts()
 
     orig_all_data = pm.all_data
-    pm.write_csv_data(csv_fname, header=header)
     pm.read_csv_data(csv_fname)
     # pm.compare_all_data(orig_all_data)
 

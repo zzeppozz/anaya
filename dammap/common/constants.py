@@ -1,3 +1,5 @@
+from osgeo import ogr, osr
+
 # Path/filenames
 IN_DIR = "dams"
 ANC_DIR = "ancillary"
@@ -15,14 +17,6 @@ IMAGE_COUNT = 2886
 DELIMITER = "\t"
 ENCODING = "utf-8"
 SEPARATOR = "_"
-
-# def get_image_keys(key_class):
-#     keys = []
-#     members = inspect.getmembers(key_class, lambda a: not (inspect.isroutine(a)))
-#     for a in members:
-#         if not a[0].startswith("__") and a[0].endswith('__'):
-#             keys.append(a[1])
-#     return keys
 
 # Metadata for all dam data
 class ALL_DATA_KEYS ():
@@ -48,37 +42,44 @@ class IMAGE_KEYS():
     LON = "longitude"
     LAT = "latitude"
     WKT = "geomwkt"
-    X_DIR = "xdirection"
-    X_DEG = "xdegrees"
-    X_MIN = "xminutes"
-    X_SEC = "xseconds"
-    Y_DIR = "ydirection"
-    Y_DEG = "ydegrees"
-    Y_MIN = "yminutes"
-    Y_SEC = "yseconds"
+    X_DIR = "x_dir"
+    X_DEG = "x_deg"
+    X_MIN = "x_min"
+    X_SEC = "x_sec"
+    Y_DIR = "y_dir"
+    Y_DEG = "y_deg"
+    Y_MIN = "y_min"
+    Y_SEC = "y_sec"
     IN_BNDS = "in_bounds"
 
-CSV_FIELDS = [
-    IMAGE_KEYS.FILE_PATH,
-    IMAGE_KEYS.ARROYO_NAME,
-    IMAGE_KEYS.ARROYO_NUM,
-    IMAGE_KEYS.DAM_NAME,
-    IMAGE_KEYS.DAM_NUM,
-    IMAGE_KEYS.DAM_DATE,
-    IMAGE_KEYS.IMG_DATE,
-    IMAGE_KEYS.LON,
-    IMAGE_KEYS.LAT,
-    IMAGE_KEYS.WKT,
-    IMAGE_KEYS.X_DIR,
-    IMAGE_KEYS.X_DEG,
-    IMAGE_KEYS.X_MIN,
-    IMAGE_KEYS.X_SEC,
-    IMAGE_KEYS.Y_DIR,
-    IMAGE_KEYS.Y_DEG,
-    IMAGE_KEYS.Y_MIN,
-    IMAGE_KEYS.Y_SEC,
-    IMAGE_KEYS.IN_BNDS
-]
+SHP_FIELDS = [
+    # Only for shapefiles
+    ('relpath', ogr.OFTString),
+    ('basename', ogr.OFTString),
+    # Saved in dictionary and CSV
+    (IMAGE_KEYS.FILE_PATH, ogr.OFTString),
+    (IMAGE_KEYS.ARROYO_NAME, ogr.OFTString),
+    (IMAGE_KEYS.ARROYO_NUM, ogr.OFTInteger),
+    (IMAGE_KEYS.DAM_NAME, ogr.OFTString),
+    (IMAGE_KEYS.DAM_NUM, ogr.OFTString),
+    (IMAGE_KEYS.DAM_DATE, ogr.OFTString),
+    (IMAGE_KEYS.IMG_DATE, ogr.OFTString),
+    (IMAGE_KEYS.LON, ogr.OFTReal),
+    (IMAGE_KEYS.LAT, ogr.OFTReal),
+    (IMAGE_KEYS.WKT, ogr.OFTString),
+    (IMAGE_KEYS.X_DIR, ogr.OFTString),
+    (IMAGE_KEYS.X_DEG, ogr.OFTReal),
+    (IMAGE_KEYS.X_MIN, ogr.OFTReal),
+    (IMAGE_KEYS.X_SEC, ogr.OFTReal),
+    (IMAGE_KEYS.Y_DIR, ogr.OFTString),
+    (IMAGE_KEYS.Y_DEG, ogr.OFTReal),
+    (IMAGE_KEYS.Y_MIN, ogr.OFTReal),
+    (IMAGE_KEYS.Y_SEC, ogr.OFTReal),
+    (IMAGE_KEYS.IN_BNDS, ogr.OFTInteger)
+    ]
+
+
+CSV_FIELDS = [f[0] for f in SHP_FIELDS]
 
 CSV_FIELDS_SMALL = [
     IMAGE_KEYS.FILE_PATH,
@@ -106,3 +107,27 @@ class IMG_META:
     Y_KEY = "GPS GPSLatitude"
     Y_DIR_KEY = "GPS GPSLatitudeRef"
     DATE_KEY = "GPS GPSDate"
+
+BAD_PATH = "/tank/anaya/dams/"
+BAD_FILES = [
+    "42_Bend/bend_2021-03-10_0131.JPG", #: Unable to get date, 'GPS GPSDate'
+    "42_Bend/bend_2021-03-10_0041.JPG", #: Unable to get date, 'GPS GPSDate'
+    "42_Bend/bend_2021-03-10_0151.JPG", #: Unable to get date, 'GPS GPSDate'
+    "42_Bend/bend_2021-03-10_0011.JPG", #: Unable to get date, 'GPS GPSDate'
+    "46_Sauna/sauna_2013-10-11_0161.JPG", #: Unable to get x y, 'GPS GPSLongitude'
+    "46_Sauna/sauna_2013-10-11_0161.JPG", #: Unable to get date, 'GPS GPSDate'
+    # Failed to return decimal degrees for
+    "46_Sauna/sauna_2013-10-11_0161.JPG",
+    "32_Fenceline/fenceline_2021-01-16_0041.JPG",
+    "5_Cottonwood/cottonwood_2015-11-09_0008.JPG",
+    "5_Cottonwood/cottonwood_2017-05-08_0021.JPG",
+    "5_Cottonwood/cottonwood_2017-12-04_0025.JPG",
+    "5_Cottonwood/cottonwood_2018-03-22_0003.JPG",
+    "5_Cottonwood/cottonwood_2016-04-24_0010.JPG",
+    "5_Cottonwood/cottonwood_2016-12-24_0016.JPG",
+    "5_Cottonwood/cottonwood_2016-04-26_0014.JPG",
+    "5_Cottonwood/cottonwood_2016-04-24_0011.JPG",
+    "5_Cottonwood/cottonwood_2018-03-22_0028.JPG",
+    "5_Cottonwood/cottonwood_2018-03-22_0005.JPG",
+    "5_Cottonwood/cottonwood_2018-05-07_0002.JPG",
+]

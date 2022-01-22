@@ -11,7 +11,7 @@ from dammap.common.util import (
 
 from dammap.common.constants import (
     IMG_META, DELIMITER, SEPARATOR, IN_DIR, ANC_DIR, THUMB_DIR, OUT_DIR, SAT_FNAME,
-    RESIZE_WIDTH, ARROYO_COUNT, IMAGE_COUNT, CSV_FIELDS)
+    RESIZE_WIDTH, ARROYO_COUNT, IMAGE_COUNT, SHP_FIELDS, CSV_FIELDS)
 
 from dammap.common.constants import ALL_DATA_KEYS as ADK
 from dammap.common.constants import IMAGE_KEYS as IK
@@ -23,28 +23,6 @@ class PicMapper(object):
     """Read a directory of image files, and create geospatial files for mapping them.
     Yelp help: https://engineeringblog.yelp.com/2017/06/making-photos-smaller.html
     """
-    FIELDS = [
-        (IK.FILE_PATH, ogr.OFTString),
-        (IK.ARROYO_NAME, ogr.OFTString),
-        (IK.ARROYO_NUM, ogr.OFTInteger),
-        (IK.DAM_NAME, ogr.OFTString),
-        (IK.DAM_NUM, ogr.OFTString),
-        (IK.DAM_DATE, ogr.OFTString),
-        (IK.IMG_DATE, ogr.OFTString),
-        (IK.LON, ogr.OFTReal),
-        (IK.LAT, ogr.OFTReal),
-        (IK.WKT, ogr.OFTString),
-        (IK.X_DIR, ogr.OFTString),
-        (IK.X_DEG, ogr.OFTReal),
-        (IK.X_MIN, ogr.OFTReal),
-        (IK.X_SEC, ogr.OFTReal),
-        (IK.Y_DIR, ogr.OFTString),
-        (IK.Y_DEG, ogr.OFTReal),
-        (IK.Y_MIN, ogr.OFTReal),
-        (IK.Y_SEC, ogr.OFTReal),
-        (IK.IN_BNDS, ogr.OFTBinary)
-    ]
-
 # ............................................................................
 # Constructor
 # .............................................................................
@@ -183,8 +161,8 @@ class PicMapper(object):
     def _good_geo(self, damdata):
         good_geo = False
         # (min_x, min_y, max_x, max_y)
-        xdd = float(damdata[LONG_FLD])
-        ydd = float(damdata[LAT_FLD])
+        xdd = float(damdata[IK.LON])
+        ydd = float(damdata[IK.LAT])
         if xdd < self.bbox[0]:
             self._logger.warn('X value {} < min {}'.format(xdd, self.bbox[0]))
         elif xdd > self.bbox[2]:
@@ -199,33 +177,33 @@ class PicMapper(object):
             
     # ...............................................
     def _create_feat_shp(self, lyr, rel_thumbfname, damdata):
-        if damdata['in_bounds'] is False:
+        if damdata[IK.IN_BNDS] is False:
             pass
         else:
             yr = mo = day = '0'
             try:
-                [yr, mo, day] = damdata['img_date']
+                [yr, mo, day] = damdata[IK.IMG_DATE]
             except:
                 self._logger.warn('damdata does not have a valid img_date')
             relpth, basefname = os.path.split(rel_thumbfname)  
-            wkt = damdata[GEOM_WKT]
+            wkt = damdata[IK.WKT]
             feat = ogr.Feature( lyr.GetLayerDefn() )
             try:
-                feat.SetField('arroyo', damdata['arroyo'])
+                feat.SetField(IK.ARROYO_NAME, damdata[IK.ARROYO_NAME])
                 feat.SetField('relpath', rel_thumbfname)
                 feat.SetField('basename', basefname)
-                feat.SetField('img_date', '{}-{}-{}'.format(yr, mo, day))
-                feat.SetField('xdegrees', damdata['xdegrees'])
-                feat.SetField('xminutes', damdata['xminutes'])
-                feat.SetField('xseconds', damdata['xseconds'])
-                feat.SetField('xdirection', damdata['xdirection'])
-                feat.SetField('ydegrees', damdata['ydegrees'])
-                feat.SetField('yminutes', damdata['yminutes'])
-                feat.SetField('yseconds', damdata['yseconds'])
-                feat.SetField('ydirection', damdata['ydirection'])
-                feat.SetField(LONG_FLD, damdata[LONG_FLD])
-                feat.SetField(LAT_FLD, damdata[LAT_FLD])
-                feat.SetField(GEOM_WKT, wkt)
+                feat.SetField(IK.IMG_DATE, '{}-{}-{}'.format(yr, mo, day))
+                feat.SetField(IK.X_DIR, damdata[IK.X_DEG])
+                feat.SetField(IK.X_MIN, damdata[IK.X_MIN])
+                feat.SetField(IK.X_SEC, damdata[IK.X_SEC])
+                feat.SetField(IK.X_DIR, damdata[IK.X_DIR])
+                feat.SetField(IK.Y_DEG, damdata[IK.Y_DEG])
+                feat.SetField(IK.Y_MIN, damdata[IK.Y_MIN])
+                feat.SetField(IK.Y_SEC, damdata[IK.Y_SEC])
+                feat.SetField(IK.Y_DIR, damdata[IK.Y_DIR])
+                feat.SetField(IK.LON, damdata[IK.LON])
+                feat.SetField(IK.LAT, damdata[IK.LAT])
+                feat.SetField(IK.WKT, wkt)
                 geom = ogr.CreateGeometryFromWkt(wkt)
                 feat.SetGeometryDirectly(geom)
             except Exception as e:
@@ -242,13 +220,13 @@ class PicMapper(object):
          dammap="file:///Users/astewart/Home/2017AnayaPics/18-LL-Spring/SpringL1-20150125_0009.JPG">
          SpringL1-20150125_0009 in 18-LL-Spring on 2015-1-25
         """
-        if damdata['in_bounds'] is False:
+        if damdata[IK.IN_BNDS] is False:
             pass
         else:
-            [yr, mo, day] = damdata['img_date'] 
-            xdd = damdata[LONG_FLD]
-            ydd = damdata[LAT_FLD]
-            arroyo = damdata['arroyo']
+            [yr, mo, day] = damdata[IK.IMG_DATE]
+            xdd = damdata[IK.LON]
+            ydd = damdata[IK.LAT]
+            arroyo = damdata[IK.ARROYO_NAME]
             _, basefname = os.path.split(rel_thumbfname)
             basename, _ = os.path.splitext(basefname)
             dt = '{}-{}-{}'.format(yr, mo, day)
@@ -300,14 +278,14 @@ class PicMapper(object):
 
 </LookAt>
         """
-        if damdata['in_bounds'] is False:
+        if damdata[IK.IN_BNDS] is False:
             pass
         else:
             try:
-                [yr, mo, day] = damdata['img_date'] 
-                xdd = damdata[LONG_FLD]
-                ydd = damdata[LAT_FLD]
-                arroyo = damdata['arroyo']
+                [yr, mo, day] = damdata[IK.IMG_DATE]
+                xdd = damdata[IK.LON]
+                ydd = damdata[IK.LAT]
+                arroyo = damdata[IK.ARROYO_NAME]
             except Exception as e:
                 self._logger.error('Failed reading data {}'.format(e))
             else:
@@ -335,9 +313,9 @@ class PicMapper(object):
 
     # ...............................................
     def _add_coords(self, all_coords, currfname, damdata):
-        currx = float(damdata[LONG_FLD])
-        curry = float(damdata[LAT_FLD])
-        for fname, (x,y) in all_coords.iteritems():
+        currx = float(damdata[IK.LON])
+        curry = float(damdata[IK.LAT])
+        for fname, (x,y) in all_coords.items():
             dx = abs(abs(x) - abs(currx))
             dy = abs(abs(y) - abs(curry))
             if dx < self.buffer_distance or dy < self.buffer_distance:
@@ -352,22 +330,21 @@ class PicMapper(object):
     def create_thumbnails(self, out_path, img_data, overwrite=True):
         thumb_path = os.path.join(out_path, THUMB_DIR)
         all_coords = {}
-        for relfname, damdata in img_data.iteritems():
-            fullfname = damdata['fullpath']
+        for relfname, damdata in img_data.items():
+            fullfname = damdata[IK.FILE_PATH]
             # Reduce image
             thumbfname = os.path.join(thumb_path, relfname)
             reduce_image_size(
                 fullfname, thumbfname, RESIZE_WIDTH, Image.ANTIALIAS,
                 overwrite=overwrite, log=self._logger)
             # Why?
-            has_geo = damdata[GEOM_WKT].startswith('Point')
+            has_geo = damdata[IK.WKT].startswith('Point')
             if has_geo:
                 all_coords = self._add_coords(all_coords, relfname, damdata)
         return all_coords
-            
-            
+
     # ...............................................
-    def create_shapefile_kml(self, shpfname=None, kmlfname=None):
+    def write_shapefile_kml(self, shpfname=None, kmlfname=None):
         kmlf = dataset = lyr = None
         # Open one or both
         if kmlfname is not None:
@@ -375,10 +352,10 @@ class PicMapper(object):
             kmlf = self._open_kml_file(kmlfname)
         if shpfname is not None:
             ready_filename(shpfname)
-            dataset, lyr = self._create_layer(self.FIELDS, shpfname)
+            dataset, lyr = self._create_layer(SHP_FIELDS, shpfname)
 
         # Iterate through features one time writing elements to each requested file
-        for relfname, damdata in self.all_data[ADK.IMAGE_META].iteritems():
+        for relfname, damdata in self.all_data[ADK.IMAGE_META].items():
             if damdata[IK.IN_BNDS] == 1:
                 rel_thumbfname = os.path.join(THUMB_DIR, relfname)
                 if kmlf:
@@ -723,7 +700,7 @@ class PicMapper(object):
         if not self.all_data:
             self.read_data_from_image_files()
         thumb_key = 'thumb_'.format(resize_width)
-        for arroyo, rfn_lst in self.all_data['arroyo'].items():
+        for arroyo, rfn_lst in self.all_data[ADK.ARROYO_META].items():
             # Check each image in arroyo
             for relfname in rfn_lst:
                 (arroyo_num, arroyo_name, dam_name, dam_date, picnum
@@ -739,7 +716,7 @@ class PicMapper(object):
                     orig_fname, resize_fname, width=resize_width,
                     sample_method=Image.ANTIALIAS)
                 # Add resized file to metadata for original image file
-                self.all_data['img_meta'][relfname][thumb_key] = resize_fname
+                self.all_data[ADK.IMAGE_META][relfname][thumb_key] = resize_fname
 
 
 # .............................................................................
@@ -755,35 +732,3 @@ if __name__ == '__main__':
     max_x = -106.04
     min_x = -106.08
     dam_buffer = .00002
-
-#     image_path = os.path.join(BASE_PATH, IN_DIR)
-#     out_path = os.path.join(BASE_PATH, OUT_DIR)
-#     resize_path= os.path.join(out_path, THUMB_DIR)
-#
-#     base_outfile = os.path.join(out_path, OUT_NAME)
-#     csv_fname = '{}.csv'.format(base_outfile)
-#     shp_fname = '{}.shp'.format(base_outfile)
-#     kml_fname = None  #'{}.kml'.format(base_outfile)
-#
-#     bbox = (min_x, min_y, max_x, max_y)
-#
-#     pm = PicMapper(image_path, buffer_distance=dam_buffer, bbox=bbox)
-#
-#     # Read data
-#     if os.path.exists(csv_fname):
-#         all_data = pm.read_csv_data(csv_fname)
-#     else:
-#         all_data = pm.read_image_data()
-#         logit(pm._logger, 'Given: {} {} {} {}'.format(pm.bbox[0], pm.bbox[1], pm.bbox[2], pm.bbox[3]))
-#         logit(pm._logger, 'Computed: {}'.format(pm.extent))
-#         pm.write_csv_data(csv_fname, all_data['img_meta'])
-#
-#     img_data = all_data['img_meta']
-#     # Reduce image sizes
-#     t = time.localtime()
-#     stamp = '{}_{}_{}-{}_{}'.format(t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min)
-#
-#     # Write smaller images
-#     all_coords = pm.create_thumbnails(out_path, img_data, overwrite=False)
-#     # Write data
-#     pm.create_shapefile_kml(shp_fname, kml_fname, img_data)

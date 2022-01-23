@@ -190,8 +190,8 @@ class PicMapper(object):
             feat = ogr.Feature( lyr.GetLayerDefn() )
             try:
                 feat.SetField(IK.ARROYO_NAME, damdata[IK.ARROYO_NAME])
-                feat.SetField('relpath', rel_thumbfname)
-                feat.SetField('basename', basefname)
+                feat.SetField('thumbpath', rel_thumbfname)
+                feat.SetField('thumbname', basefname)
                 feat.SetField(IK.IMG_DATE, '{}-{}-{}'.format(yr, mo, day))
                 feat.SetField(IK.X_DIR, damdata[IK.X_DEG])
                 feat.SetField(IK.X_MIN, damdata[IK.X_MIN])
@@ -344,9 +344,12 @@ class PicMapper(object):
         return all_coords
 
     # ...............................................
-    def write_shapefile_kml(self, shpfname=None, kmlfname=None):
-        kmlf = dataset = lyr = None
-        # Open one or both
+    def write_outputs(self, csvfname=None, shpfname=None, kmlfname=None):
+        csvwriter = csvf = kmlf = dataset = lyr = None
+        # Open one or more
+        if csvfname is not None:
+            ready_filename(csvfname)
+            csvwriter, csvf = get_csv_dict_writer(csvfname, CSV_FIELDS, DELIMITER)
         if kmlfname is not None:
             ready_filename(kmlfname)
             kmlf = self._open_kml_file(kmlfname)
@@ -356,14 +359,25 @@ class PicMapper(object):
 
         # Iterate through features one time writing elements to each requested file
         for relfname, damdata in self.all_data[ADK.IMAGE_META].items():
+            # CSV file
+            if csvwriter:
+                try:
+                    csvwriter.writerow(damdata)
+                except Exception as e:
+                    self._logger.error("Failed to write {}, {}".format(damdata, e))
             if damdata[IK.IN_BNDS] == 1:
+                # Thumbnail only relevant to geo-files
                 rel_thumbfname = os.path.join(THUMB_DIR, relfname)
+                # KML file
                 if kmlf:
                     self._create_lookat_kml(kmlf, rel_thumbfname, damdata)
+                # Shapefile
                 if dataset and lyr:
                     self._create_feat_shp(lyr, rel_thumbfname, damdata)
 
         # Close open files
+        if csvf:
+            csvf.close()
         if kmlf:
             self._close_kml_file(kmlf)
         if dataset:
@@ -552,6 +566,7 @@ class PicMapper(object):
                     # Add image metadata to image_meta dict
                     self.all_data[ADK.IMAGE_META][relfname] = {
                         IK.FILE_PATH: fullfname,
+                        IK.BASE_NAME: fname,
                         IK.ARROYO_NAME: arroyo_name,
                         IK.ARROYO_NUM: arroyo_num,
                         IK.DAM_NAME: dam_name,
@@ -670,25 +685,6 @@ class PicMapper(object):
             print("Error: Found {} image count, expected {}".format(
                 self.all_data[ADK.IMG_COUNT], IMAGE_COUNT))
 
-
-    # ...............................................
-    def write_csv_data(self, out_csv_fname, header=CSV_FIELDS, delimiter=DELIMITER):
-        # Overwrite existing, make directories if needed
-        ready_filename(out_csv_fname, overwrite=True)
-        # Get a dictionary writer and write header
-        writer, f = get_csv_dict_writer(out_csv_fname, header, delimiter)
-        # Write every record
-        try:
-            for _, meta in self.all_data[ADK.IMAGE_META].items():
-                try:
-                    writer.writerow(meta)
-                except Exception as e:
-                    self._logger.error("Failed to write {}, {}".format(meta, e))
-        except Exception as e:
-            raise(e)
-        finally:
-            f.close()
-
     # ...............................................
     def resize_images(self, resize_path, resize_width=RESIZE_WIDTH):
         """Resize all original images in the image_path tree.
@@ -697,9 +693,9 @@ class PicMapper(object):
             resize_path (str): output path for resized images
             resize_width (int): width in pixels for resized images
         """
+        start_idx = len(self.image_path) + 1
         if not self.all_data:
             self.read_data_from_image_files()
-        thumb_key = 'thumb_'.format(resize_width)
         for arroyo, rfn_lst in self.all_data[ADK.ARROYO_META].items():
             # Check each image in arroyo
             for relfname in rfn_lst:
@@ -709,14 +705,21 @@ class PicMapper(object):
                 # Get original file
                 orig_fname = os.path.join(self.image_path, relfname)
                 self._logger.info('Reading {} ...'.format(orig_fname))
+
                 # Get new filename
+                reldirs, fname = os.path.split(relfname)
+                basename, ext = os.path.splitext(fname)
+                # thumb_fname = '{}-{}'.format(basename, resize_width, ext)
+                # resize_fname = os.path.join(resize_path, reldirs, thumb_fname)
                 resize_fname = os.path.join(resize_path, relfname)
+
                 # Rewrite the image
                 reduce_image_size(
                     orig_fname, resize_fname, width=resize_width,
                     sample_method=Image.ANTIALIAS)
                 # Add resized file to metadata for original image file
-                self.all_data[ADK.IMAGE_META][relfname][thumb_key] = resize_fname
+                rel_resize_fname = resize_fname[start_idx:]
+                self.all_data[ADK.IMAGE_META][relfname][IK.THUMB_PATH] = rel_resize_fname
 
 
 # .............................................................................

@@ -11,6 +11,12 @@ from transform.dam_map import PicMapper
 kml_flag = False
 shp_flag = False
 
+def stamp(msg):
+    t = time.localtime()
+    print('## {} {}-{}-{} {}:{}:{}'.format(
+        msg, t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))
+
+
 # ...............................................
 if __name__ == "__main__":
     is_dev = False
@@ -53,37 +59,41 @@ if __name__ == "__main__":
         inpath, buffer_distance=dam_buffer, bbox=bbox, shp_fname=shp_fname,
         kml_fname=None, logger=logger)
 
-    t = time.localtime()
-    print('Start {}_{}_{} {}:{}:{}'.format(
-        t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))
+    stamp('Start')
 
     # Sets all_data dictionary on object
     pm.read_metadata_from_directory()
-    t = time.localtime()
-    print('Read filenames {}_{}_{} {}:{}:{}'.format(
-        t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))
+    stamp('Read filenames')
 
     # Updates all images in the dictionary from the referenced files
     pm.read_data_from_image_files()
-    pm.write_csv_data(csv_fname, header=CSV_FIELDS)
-    pm.write_shapefile_kml(shpfname=shp_fname)
-    t = time.localtime()
-    print('Read image files {}_{}_{} {}:{}:{}'.format(
-        t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))
+    stamp('Read image files')
+
+    # Rewrite thumbnails of all images
+    pm.resize_images(resize_path)
+    stamp('Wrote thumbnails')
+
+    # Write data to CSV, Shapefile, KML
+    # pm.write_outputs(csvfname=csv_fname)
+    # stamp('Wrote CSV')
+    # pm.write_outputs(shpfname=shp_fname)
+    # stamp('Wrote shapefile')
+    # pm.write_outputs(kmlfname=kml_fname)
+    # stamp('Wrote KML')
+
     # Test that we have the expected number of records
-    print('Testing results after reading image metadata')
     pm.test_counts()
+    stamp('Tested counts')
 
     orig_all_data = pm.all_data
     pm.read_csv_data(csv_fname)
+    stamp('Read CSV data')
     # pm.compare_all_data(orig_all_data)
 
     # Test that we have the expected number of records
-    print('Testing results after reading CSV metadata')
     pm.test_counts()
-    t = time.localtime()
-    print('End {}_{}_{} {}:{}:{}'.format(
-        t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))
+    stamp('Tested counts again')
+    stamp('Finished')
 
     # # Write smaller images and save to all_data dictionary
     # pm.resize_images(resize_width=500, resize_path=resize_path)

@@ -32,6 +32,8 @@ class ALL_DATA_KEYS ():
 class IMAGE_KEYS():
     # Data from directory and filenames
     FILE_PATH = "fullpath"
+    THUMB_PATH = "thumbpath"
+    BASE_NAME = "basename"
     ARROYO_NAME = "arroyo"
     ARROYO_NUM = "arroyo_num"
     DAM_NAME = "dam"
@@ -54,8 +56,8 @@ class IMAGE_KEYS():
 
 SHP_FIELDS = [
     # Only for shapefiles
-    ('relpath', ogr.OFTString),
-    ('basename', ogr.OFTString),
+    ('thumbpath', ogr.OFTString),
+    ('thumbname', ogr.OFTString),
     # Saved in dictionary and CSV
     (IMAGE_KEYS.FILE_PATH, ogr.OFTString),
     (IMAGE_KEYS.ARROYO_NAME, ogr.OFTString),

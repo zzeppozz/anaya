@@ -108,7 +108,7 @@ class IMG_META:
     X_DIR_KEY = "GPS GPSLongitudeRef"
     Y_KEY = "GPS GPSLatitude"
     Y_DIR_KEY = "GPS GPSLatitudeRef"
-    DATE_KEY = "GPS GPSDate"
+    DATE_KEY_OPTS = ["GPS GPSDate", "Image DateTime"]
 
 BAD_PATH = "/tank/anaya/dams/"
 BAD_FILES = [

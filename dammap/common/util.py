@@ -46,6 +46,12 @@ def get_logger(outpath):
     log.addHandler(file_log_handler)
     return log
 
+# .............................................................................
+def logit(log, msg):
+    if log:
+        log.warn(msg)
+    else:
+        print(msg)
 
 # .............................................................................
 def _format_filename(basename):
@@ -209,14 +215,6 @@ def test_names_in_tree(inpath):
                 print("   Arroyo: {} {}".format(arroyo_num, arroyo_name))
                 print("   Dam:    {}, {}-{}-{}, {}".format(
                     name, date_lst[0], date_lst[1], date_lst[2], picnum))
-
-
-# .............................................................................
-def logit(log, msg):
-    if log:
-        log.warn(msg)
-    else:
-        print(msg)
 
 
 # .............................................................................
@@ -388,11 +386,15 @@ def get_csv_writer(datafile, delimiter, doAppend=True):
 def reduce_image_size(
         infname, outfname, width, sample_method=Image.ANTIALIAS, overwrite=True, log=None):
     if ready_filename(outfname, overwrite=overwrite):
-        img = Image.open(infname)
-        wpercent = (width / float(img.size[0]))
-        height = int((float(img.size[1]) * float(wpercent)))
-        size = (width, height)
-        img = img.resize(size, sample_method)
-        img.save(outfname)
-        logit(log, 'Rewrote image {} to {}'.format(infname, outfname))
+        try:
+            img = Image.open(infname)
+        except Exception as e:
+            logit(log, " *** Unable to open file {}, {}".format(infname, e))
+        else:
+            wpercent = (width / float(img.size[0]))
+            height = int((float(img.size[1]) * float(wpercent)))
+            size = (width, height)
+            img = img.resize(size, sample_method)
+            img.save(outfname)
+            logit(log, 'Rewrote image {} to {}'.format(infname, outfname))
 

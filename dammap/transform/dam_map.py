@@ -59,13 +59,27 @@ class PicMapper(object):
         return (self._min_x, self._min_y, self._max_x, self._max_y)
 
     # ...............................................
+    def _get_val_from_alternative_keys(self, tags, alternative_keys):
+        # Get value
+        for key in alternative_keys:
+            try:
+                valstr = tags[key].values
+            except KeyError:
+                valstr = None
+            else:
+                break
+        return valstr
+
+    # ...............................................
     def _get_date(self, tags):
         # Get date
-        dtstr = tags[IMG_META.DATE_KEY].values
-        try:
-            return [int(x) for x in dtstr.split(':')]
-        except:
-            return None
+        dtstr = self._get_val_from_alternative_keys(tags, IMG_META.DATE_KEY_OPTS)
+        if dtstr is not None:
+            try:
+                return [int(x) for x in dtstr.split(':')]
+            except:
+                self._logger.error(f"datestr {dtstr} cannot be parsed into integers")
+        return []
             
     # ...............................................
     def _get_location_vals(self, tags, locKey, dirKey, negativeIndicator):
@@ -91,11 +105,13 @@ class PicMapper(object):
             tags, IMG_META.X_KEY, IMG_META.X_DIR_KEY, 'W')
         ydd, ydeg, ymin, ysec, ydir = self._get_location_vals(
             tags, IMG_META.Y_KEY, IMG_META.Y_DIR_KEY, 'S')
+        if None in (xdd, xdeg, xmin, xsec, xdir, ydd, ydeg, ymin, ysec, ydir):
+            self._logger.error(f"coordinates {xdd} {ydd} cannot be parsed")
         # Convert to desired format
         dd = (xdd, ydd)
         xdms = (xdeg, xmin, xsec, xdir)
-        ydms = (ydeg, ymin, ysec, ydir)  
-        
+        ydms = (ydeg, ymin, ysec, ydir)
+
         return dd, xdms, ydms
         
     # ...............................................
@@ -344,18 +360,18 @@ class PicMapper(object):
         return all_coords
 
     # ...............................................
-    def write_outputs(self, csvfname=None, shpfname=None, kmlfname=None):
+    def write_outputs(self, csvfname=None, shpfname=None, kmlfname=None, overwrite=True):
         csvwriter = csvf = kmlf = dataset = lyr = None
         # Open one or more
         if csvfname is not None:
-            ready_filename(csvfname)
-            csvwriter, csvf = get_csv_dict_writer(csvfname, CSV_FIELDS, DELIMITER)
+            if ready_filename(csvfname, overwrite=overwrite):
+                csvwriter, csvf = get_csv_dict_writer(csvfname, CSV_FIELDS, DELIMITER)
         if kmlfname is not None:
-            ready_filename(kmlfname)
-            kmlf = self._open_kml_file(kmlfname)
+            if ready_filename(kmlfname, overwrite=overwrite):
+                kmlf = self._open_kml_file(kmlfname)
         if shpfname is not None:
-            ready_filename(shpfname)
-            dataset, lyr = self._create_layer(SHP_FIELDS, shpfname)
+            if ready_filename(shpfname, overwrite=overwrite):
+                dataset, lyr = self._create_layer(SHP_FIELDS, shpfname)
 
         # Iterate through features one time writing elements to each requested file
         for relfname, damdata in self.all_data[ADK.IMAGE_META].items():
@@ -367,7 +383,8 @@ class PicMapper(object):
                     self._logger.error("Failed to write {}, {}".format(damdata, e))
             if damdata[IK.IN_BNDS] == 1:
                 # Thumbnail only relevant to geo-files
-                rel_thumbfname = os.path.join(THUMB_DIR, relfname)
+                rel_thumbfname = damdata[IK.THUMB_PATH]
+                # rel_thumbfname = os.path.join(THUMB_DIR, relfname)
                 # KML file
                 if kmlf:
                     self._create_lookat_kml(kmlf, rel_thumbfname, damdata)
@@ -403,15 +420,11 @@ class PicMapper(object):
                 pass
         # Parse image metadata
         if tags:
-            try:
-                dd, xdms, ydms = self._get_dd(tags)
-            except Exception as e:
-                self._logger.error('{}: Unable to get x y, {}'.format(fullname, e))
-            try:
-                yr, mo, day = self._get_date(tags)
-            except Exception as e:
-                self._logger.error('{}: Unable to get date, {}'.format(fullname, e))
-        return (yr, mo, day), dd, xdms, ydms
+            dd, xdms, ydms = self._get_dd(tags)
+            date_tuple = self._get_date(tags)
+        else:
+            self._logger.error(f'{fullname}: Unable to get tags')
+        return date_tuple, dd, xdms, ydms
     
     # ...............................................
     def eval_extent(self, x: float, y: float) -> int:
@@ -686,7 +699,7 @@ class PicMapper(object):
                 self.all_data[ADK.IMG_COUNT], IMAGE_COUNT))
 
     # ...............................................
-    def resize_images(self, resize_path, resize_width=RESIZE_WIDTH):
+    def resize_images(self, resize_path, resize_width=RESIZE_WIDTH, overwrite=True):
         """Resize all original images in the image_path tree.
 
         Args:
@@ -716,7 +729,7 @@ class PicMapper(object):
                 # Rewrite the image
                 reduce_image_size(
                     orig_fname, resize_fname, width=resize_width,
-                    sample_method=Image.ANTIALIAS)
+                    sample_method=Image.ANTIALIAS, overwrite=overwrite)
                 # Add resized file to metadata for original image file
                 rel_resize_fname = resize_fname[start_idx:]
                 self.all_data[ADK.IMAGE_META][relfname][IK.THUMB_PATH] = rel_resize_fname

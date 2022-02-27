@@ -70,36 +70,36 @@ if __name__ == "__main__":
     stamp('Read image files')
 
     # Rewrite thumbnails of all images
-    pm.resize_images(resize_path)
+    pm.resize_images(resize_path, overwrite=True)
     stamp('Wrote thumbnails')
 
     # Write data to CSV, Shapefile, KML
-    # pm.write_outputs(csvfname=csv_fname)
-    # stamp('Wrote CSV')
-    # pm.write_outputs(shpfname=shp_fname)
-    # stamp('Wrote shapefile')
-    # pm.write_outputs(kmlfname=kml_fname)
-    # stamp('Wrote KML')
-
-    # Test that we have the expected number of records
-    pm.test_counts()
-    stamp('Tested counts')
-
-    orig_all_data = pm.all_data
-    pm.read_csv_data(csv_fname)
-    stamp('Read CSV data')
-    # pm.compare_all_data(orig_all_data)
-
-    # Test that we have the expected number of records
-    pm.test_counts()
-    stamp('Tested counts again')
-    stamp('Finished')
-
-    # # Write smaller images and save to all_data dictionary
-    # pm.resize_images(resize_width=500, resize_path=resize_path)
-
-    print('Given: {}'.format(pm.bbox))
-    print('Computed: {}'.format(pm.bounds))
+    pm.write_outputs(csvfname=csv_fname)
+    stamp('Wrote CSV')
+    pm.write_outputs(shpfname=shp_fname)
+    stamp('Wrote shapefile')
+    # # pm.write_outputs(kmlfname=kml_fname)
+    # # stamp('Wrote KML')
+    #
+    # # Test that we have the expected number of records
+    # pm.test_counts()
+    # stamp('Tested counts')
+    #
+    # orig_all_data = pm.all_data
+    # pm.read_csv_data(csv_fname)
+    # stamp('Read CSV data')
+    # # pm.compare_all_data(orig_all_data)
+    #
+    # # Test that we have the expected number of records
+    # pm.test_counts()
+    # stamp('Tested counts again')
+    # stamp('Finished')
+    #
+    # # # Write smaller images and save to all_data dictionary
+    # # pm.resize_images(resize_width=500, resize_path=resize_path)
+    #
+    # print('Given: {}'.format(pm.bbox))
+    # print('Computed: {}'.format(pm.bounds))
 
 """
 

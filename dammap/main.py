@@ -53,11 +53,9 @@ if __name__ == "__main__":
     csv_fname = '{}.csv'.format(base_fname)
     shp_fname = '{}.shp'.format(base_fname)
     kml_fname = '{}.kml'.format(base_fname)
-    logger = get_logger(outpath)
+    logger = get_logger(outpath, logname="dam_map")
 
-    pm = PicMapper(
-        inpath, buffer_distance=dam_buffer, bbox=bbox, shp_fname=shp_fname,
-        kml_fname=None, logger=logger)
+    pm = PicMapper(inpath, buffer_distance=dam_buffer, bbox=bbox, logger=logger)
 
     stamp('Start')
 
@@ -70,13 +68,11 @@ if __name__ == "__main__":
     stamp('Read image files')
 
     # Rewrite thumbnails of all images
-    pm.resize_images(resize_path, overwrite=True)
+    pm.resize_images(resize_path, overwrite=False)
     stamp('Wrote thumbnails')
 
     # Write data to CSV, Shapefile, KML
-    pm.write_outputs(csvfname=csv_fname)
-    stamp('Wrote CSV')
-    pm.write_outputs(shpfname=shp_fname)
+    pm.write_outputs(csvfname=csv_fname, shpfname=shp_fname)
     stamp('Wrote shapefile')
     # # pm.write_outputs(kmlfname=kml_fname)
     # # stamp('Wrote KML')

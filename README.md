@@ -4,8 +4,8 @@ Project to georeference Anaya Springs arroyos
 ## Dependencies:
 
 * OSGEO GDAL and OGR: Raster and Vector Geospatial functions
-  * Apt/RPM package must be installed on the base system, and python package must be 
-    installed in the default system python, then the virtual environment must inherit  
+  * Apt/RPM package must be installed on the base system, and python package must be
+    installed in the default system python, then the virtual environment must inherit
 
 * ExifRead: reads image metadata
 
@@ -13,8 +13,8 @@ Project to georeference Anaya Springs arroyos
 
 ## Run
 
-dam_process.dam_map.PicMapper contains all the functions to read metadata, 
-and read and rewrite image files. 
+dam_process.dam_map.PicMapper contains all the functions to read metadata,
+and read and rewrite image files.
 
 tools.util contains helper functions for image proce
 go.py is a helper script to execute image file assessment and rewrite
@@ -88,7 +88,7 @@ Lower Right ( 1698900.000, 1613620.000) (106d 3'13.20"W, 35d26' 5.49"N)
 Center      ( 1696100.000, 1616425.000) (106d 3'46.98"W, 35d26'33.29"N)
 Band 1 Block=2800x128 Type=Float32, ColorInterp=Gray
   Description = Surface Model Raster Band
-  Min=5837.841 Max=6139.475 
+  Min=5837.841 Max=6139.475
   Minimum=5837.841, Maximum=6139.475, Mean=5995.771, StdDev=66.157
   NoData Value=-32767
   Metadata:
@@ -103,7 +103,7 @@ Band 1 Block=2800x128 Type=Float32, ColorInterp=Gray
 * Input raster data from county, op140814.tif
 * All additional files are duplicates, with TIFFTAG_DATETIME=2015:05:03 21:46:49
 * 11201 pixels square - to print at 150 dpi --> 74" square
-* 
+*
 ```commandline
 $ gdalinfo op140814.tif
 Driver: GTiff/GeoTIFF
@@ -122,11 +122,11 @@ Image Structure Metadata:
   COMPRESSION=JPEG
   INTERLEAVE=PIXEL
 Corner Coordinates:
-Upper Left  ( 1693299.500, 1619230.500) 
-Lower Left  ( 1693299.500, 1613620.000) 
-Upper Right ( 1698900.000, 1619230.500) 
-Lower Right ( 1698900.000, 1613620.000) 
-Center      ( 1696099.750, 1616425.250) 
+Upper Left  ( 1693299.500, 1619230.500)
+Lower Left  ( 1693299.500, 1613620.000)
+Upper Right ( 1698900.000, 1619230.500)
+Lower Right ( 1698900.000, 1613620.000)
+Center      ( 1696099.750, 1616425.250)
 Band 1 Block=256x256 Type=Byte, ColorInterp=Red
   Overviews: 5601x5611, 2801x2806, 1401x1403, 701x702, 351x351, 176x176, 88x88, 44x44, 22x22, 11x11
 Band 2 Block=256x256 Type=Byte, ColorInterp=Green
@@ -194,7 +194,7 @@ PROJCRS["NAD83(HARN) / New Mexico Central (ftUS)",
 
 ### Topography
 * Input shapefile data, topo_140814.shp
-* ogrinfo 
+* ogrinfo
   * projection parameters match
   * datum mismatch
 ```commandline
@@ -248,7 +248,7 @@ Data axis to CRS axis mapping: 1,2
 ```
 ### Digital Elevation Model
 * Input raster dem140814.tif
-* gdalinfo 
+* gdalinfo
   * indicates SRS EPSG:2903, https://epsg.io/2903
   * parameters do not match
   * layer overlays with others in QGIS

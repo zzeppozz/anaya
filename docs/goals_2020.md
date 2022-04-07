@@ -2,7 +2,7 @@
 * SRS - EPSG:102713, match satellite image
 * Layers:
   * Split dams into separate point layers (reproject)
-  * Satellite raster 
+  * Satellite raster
   * Flowline vector (reproject)
 
 * Send Bill
@@ -20,7 +20,7 @@
 
 HUC data – not fine enough
 
-Use flowline 
+Use flowline
 
 ### Orthophoto tfw file definition
 https://en.wikipedia.org/wiki/World_file
@@ -33,4 +33,3 @@ Line 4: E: y-component of the pixel height (y-scale), typically negative
 Line 5: C: x-coordinate of the center of the original image's upper left pixel transformed to the map
 Line 6: F: y-coordinate of the center of the original image's upper left pixel transformed to the map
 ```
-

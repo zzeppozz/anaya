@@ -1,17 +1,14 @@
-import csv
 import exifread
 import os
 from osgeo import ogr, osr
 from PIL import Image
-import time
 
 from dammap.common.util import (
-    get_csv_dict_reader, get_csv_dict_writer, parse_relative_fname,
-    get_logger, logit, ready_filename, reduce_image_size)
+    get_csv_dict_reader, get_csv_dict_writer, parse_relative_fname, get_logger, ready_filename, reduce_image_size)
 
 from dammap.common.constants import (
-    IMG_META, DELIMITER, SEPARATOR, IN_DIR, ANC_DIR, THUMB_DIR, OUT_DIR, SAT_FNAME,
-    RESIZE_WIDTH, ARROYO_COUNT, IMAGE_COUNT, SHP_FIELDS, CSV_FIELDS)
+    IMG_META, DELIMITER, ANC_DIR, THUMB_DIR, OUT_DIR, SAT_FNAME, RESIZE_WIDTH, ARROYO_COUNT, IMAGE_COUNT, SHP_FIELDS,
+    CSV_FIELDS)
 
 from dammap.common.constants import ALL_DATA_KEYS as ADK
 from dammap.common.constants import IMAGE_KEYS as IK
@@ -27,16 +24,13 @@ class PicMapper(object):
 # Constructor
 # .............................................................................
     def __init__(
-            self, image_path, buffer_distance=.0002, bbox=(-180, -90, 180, 90), 
-            shp_fname=None, kml_fname=None, logger=None):
+            self, image_path, buffer_distance=.0002, bbox=(-180, -90, 180, 90), logger=None):
         """
         Args:
             image_path: Root path for image files to be processed
             buffer_distance: Buffer in which coordinates are considered to be the same location
             bbox: Bounds of the output data, in (min_x, min_y, max_x, max_y) format.  Outside these
                 bounds, images will be discarded
-            shp_fname (str): optional name for output shapefile(s)
-            kml_fname (str): optional name for output kml file
             logger (object): logger for error logging
         """
         self.base_path, _ = os.path.split(image_path)
@@ -67,53 +61,73 @@ class PicMapper(object):
             except KeyError:
                 valstr = None
             else:
+                # If date tag, possible space between date and time
+                if key in IMG_META.DATE_KEY_OPTS:
+                    try:
+                        valstr.index(" ")
+                    except ValueError:
+                        pass
+                    else:
+                        valstr = valstr.split(" ")[0]
                 break
+
         return valstr
 
     # ...............................................
     def _get_date(self, tags):
         # Get date
         dtstr = self._get_val_from_alternative_keys(tags, IMG_META.DATE_KEY_OPTS)
+
         if dtstr is not None:
             try:
                 return [int(x) for x in dtstr.split(':')]
             except:
                 self._logger.error(f"datestr {dtstr} cannot be parsed into integers")
         return []
-            
+
     # ...............................................
     def _get_location_vals(self, tags, locKey, dirKey, negativeIndicator):
+        dd = degrees = minutes = seconds = nsew = None
         isNegative = False
         # Get longitude or latitude
-        degObj, minObj, secObj = tags[locKey].values
-        nsew = tags[dirKey].printable
-        if nsew == negativeIndicator:
-            isNegative = True
-        # Convert to float
-        degrees = degObj.num / float(degObj.den) 
-        minutes = minObj.num / float(minObj.den)
-        seconds = secObj.num / float(secObj.den)    
-        # Convert to decimal degrees
-        dd = (seconds/3600) + (minutes/60) + degrees
-        if isNegative:
-            dd = -1 * dd
+        try:
+            degObj, minObj, secObj = tags[locKey].values
+        except KeyError:
+            gpskeys = [k for k in tags.keys() if k.startswith("GPS")]
+            self._logger.error(f"Missing {locKey} in {gpskeys}")
+            # raise
+        else:
+            nsew = tags[dirKey].printable
+            if nsew == negativeIndicator:
+                isNegative = True
+            # Convert to float
+            degrees = degObj.num
+            minutes = minObj.num
+            seconds = float(secObj.real)
+            # Convert to decimal degrees
+            dd = (seconds/3600) + (minutes/60) + degrees
+            if isNegative:
+                dd = -1 * dd
         return dd, degrees, minutes, seconds, nsew
-    
+
     # ...............................................
     def _get_dd(self, tags):
+        dd = xdms = ydms = None
         xdd, xdeg, xmin, xsec, xdir = self._get_location_vals(
             tags, IMG_META.X_KEY, IMG_META.X_DIR_KEY, 'W')
         ydd, ydeg, ymin, ysec, ydir = self._get_location_vals(
             tags, IMG_META.Y_KEY, IMG_META.Y_DIR_KEY, 'S')
+
         if None in (xdd, xdeg, xmin, xsec, xdir, ydd, ydeg, ymin, ysec, ydir):
-            self._logger.error(f"coordinates {xdd} {ydd} cannot be parsed")
-        # Convert to desired format
-        dd = (xdd, ydd)
-        xdms = (xdeg, xmin, xsec, xdir)
-        ydms = (ydeg, ymin, ysec, ydir)
+            self._logger.error(f"Coordinates cannot be parsed")
+        else:
+            # Convert to desired format
+            dd = (xdd, ydd)
+            xdms = (xdeg, xmin, xsec, xdir)
+            ydms = (ydeg, ymin, ysec, ydir)
 
         return dd, xdms, ydms
-        
+
     # ...............................................
     def _open_kml_file(self, fname):
         """
@@ -142,13 +156,13 @@ class PicMapper(object):
         f.write('      </LatLonBox>\n')
         f.write('   </GroundOverlay>\n')
         return f
-    
+
     # ...............................................
     def _close_kml_file(self, kmlf):
         kmlf.write('</Folder>\n')
         kmlf.write('</Document></kml>\n')
         kmlf.close()
-    
+
     # ...............................................
     def _create_layer(self, fields, shpFname):
         ogr.RegisterAll()
@@ -165,7 +179,7 @@ class PicMapper(object):
             if lyr is None:
                 raise Exception('Layer creation failed for %s.' % shpFname)
         except Exception as e:
-            raise Exception('Failed creating dataset or layer for %s (%s)' 
+            raise Exception('Failed creating dataset or layer for %s (%s)'
                                   % (shpFname, str(e)))
         # Create attributes
         for (fldname, fldtype) in fields:
@@ -173,7 +187,7 @@ class PicMapper(object):
             if lyr.CreateField(fldDefn) != 0:
                 raise Exception('CreateField failed for %s' % (fldname))
         return ds, lyr
-    
+
     def _good_geo(self, damdata):
         good_geo = False
         # (min_x, min_y, max_x, max_y)
@@ -190,7 +204,7 @@ class PicMapper(object):
         else:
             good_geo = True
         return good_geo
-            
+
     # ...............................................
     def _create_feat_shp(self, lyr, rel_thumbfname, damdata):
         if damdata[IK.IN_BNDS] is False:
@@ -201,12 +215,12 @@ class PicMapper(object):
                 [yr, mo, day] = damdata[IK.IMG_DATE]
             except:
                 self._logger.warn('damdata does not have a valid img_date')
-            relpth, basefname = os.path.split(rel_thumbfname)  
+            relpth, basefname = os.path.split(rel_thumbfname)
             wkt = damdata[IK.WKT]
             feat = ogr.Feature( lyr.GetLayerDefn() )
             try:
                 feat.SetField(IK.ARROYO_NAME, damdata[IK.ARROYO_NAME])
-                feat.SetField('thumbpath', rel_thumbfname)
+                feat.SetField(IK.THUMB_PATH, rel_thumbfname)
                 feat.SetField('thumbname', basefname)
                 feat.SetField(IK.IMG_DATE, '{}-{}-{}'.format(yr, mo, day))
                 feat.SetField(IK.X_DIR, damdata[IK.X_DEG])
@@ -228,11 +242,11 @@ class PicMapper(object):
                 # Create new feature, setting FID, in this layer
                 lyr.CreateFeature(feat)
                 feat.Destroy()
-            
+
     # ...............................................
     def _create_feat_kml(self, kmlf, rel_thumbfname, damdata):
         """
-        <img style="max-width:500px;" 
+        <img style="max-width:500px;"
          dammap="file:///Users/astewart/Home/2017AnayaPics/18-LL-Spring/SpringL1-20150125_0009.JPG">
          SpringL1-20150125_0009 in 18-LL-Spring on 2015-1-25
         """
@@ -246,7 +260,7 @@ class PicMapper(object):
             _, basefname = os.path.split(rel_thumbfname)
             basename, _ = os.path.splitext(basefname)
             dt = '{}-{}-{}'.format(yr, mo, day)
-        
+
             kmlf.write('  <Placemark>\n')
             kmlf.write('    <name>{}</name>\n'.format(basefname))
             kmlf.write('    <description>{} in {} on {}</description>\n'
@@ -256,7 +270,7 @@ class PicMapper(object):
             kmlf.write('    <Point><coordinates>{},{}</coordinates></Point>\n'
                        .format(xdd, ydd))
             kmlf.write('  </Placemark>\n')
-        
+
     # ...............................................
     def _create_lookat_kml(self, kmlf, rel_thumbfname, damdata):
         """
@@ -307,7 +321,7 @@ class PicMapper(object):
             else:
                 _, basefname = os.path.split(rel_thumbfname)
                 basename, _ = os.path.splitext(basefname)
-                dt = '{}-{}-{}'.format(yr, mo, day)     
+                dt = '{}-{}-{}'.format(yr, mo, day)
                 kmlf.write('  <Placemark>\n')
                 kmlf.write('    <name>{}</name>\n'.format(basefname))
                 kmlf.write('    <description>{} in {} on {}</description>\n'
@@ -341,7 +355,7 @@ class PicMapper(object):
                 break
         all_coords[currfname] = (currx, curry)
         return all_coords
-            
+
     # ...............................................
     def create_thumbnails(self, out_path, img_data, overwrite=True):
         thumb_path = os.path.join(out_path, THUMB_DIR)
@@ -365,7 +379,7 @@ class PicMapper(object):
         # Open one or more
         if csvfname is not None:
             if ready_filename(csvfname, overwrite=overwrite):
-                csvwriter, csvf = get_csv_dict_writer(csvfname, CSV_FIELDS, DELIMITER)
+                csvwriter, csvf = get_csv_dict_writer(csvfname, self.all_data[ADK.IMAGE_META].keys(), DELIMITER)
         if kmlfname is not None:
             if ready_filename(kmlfname, overwrite=overwrite):
                 kmlf = self._open_kml_file(kmlfname)
@@ -403,7 +417,7 @@ class PicMapper(object):
 
     # ...............................................
     def get_image_metadata(self, fullname):
-        tags = dd = xdms = ydms = yr = mo = day = None
+        tags = date_tuple = dd = xdms = ydms = None
         # Read image metadata
         try:
             # Open file in binary mode
@@ -423,25 +437,25 @@ class PicMapper(object):
             dd, xdms, ydms = self._get_dd(tags)
             date_tuple = self._get_date(tags)
         else:
-            self._logger.error(f'{fullname}: Unable to get tags')
+            self._logger.error(f'{fullname}: exifread found no tags')
         return date_tuple, dd, xdms, ydms
-    
+
     # ...............................................
     def eval_extent(self, x: float, y: float) -> int:
         """Return 1 if point is within bbox, 0 if outside."""
         in_bounds = 1
         # in assigned bbox (min_x, min_y, max_x, max_y)?
-        if (x < self.bbox[0] or 
-            x > self.bbox[2] or 
-            y < self.bbox[1] or 
+        if (x < self.bbox[0] or
+            x > self.bbox[2] or
+            y < self.bbox[1] or
             y > self.bbox[3]):
             in_bounds = 0
-            
+
         if x < self._min_x:
             self._min_x = x
         if x > self._max_x:
             self._max_x = x
-            
+
         if y < self._min_y:
             self._min_y = y
         if y > self._max_y:
@@ -457,13 +471,13 @@ class PicMapper(object):
                 self._min_x = x
             if x > self._max_x:
                 self._max_x = x
-                
+
             if y < self._min_y:
                 self._min_y = y
             if y > self._max_y:
                 self._max_y = y
         return in_bounds
-    
+
     # ...............................................
     @property
     def extent(self):
@@ -477,7 +491,7 @@ class PicMapper(object):
         except:
             date_vals = None
         return date_vals
-        
+
     # ...............................................
     def read_csv_data(self, csv_fname, delimiter=DELIMITER):
         start_idx = len(self.image_path) + 1
@@ -617,22 +631,21 @@ class PicMapper(object):
                 fullfname = os.path.join(self.image_path, relfname)
                 img_date, xydd, xdms, ydms = self.get_image_metadata(fullfname)
 
+
                 # Test geodata
-                if xdms:
-                    (xdeg, xmin, xsec, xdir) = xdms
-                if ydms:
-                    (ydeg, ymin, ysec, ydir) = ydms
-                if xydd is None:
+                if None in (xydd, xdms, ydms):
                     in_bounds = 0
                     self._logger.warn('Failed to return decimal degrees for {}'.format(relfname))
                 else:
+                    (xdeg, xmin, xsec, xdir) = xdms
+                    (ydeg, ymin, ysec, ydir) = ydms
                     lon = xydd[0]
                     lat = xydd[1]
                     wkt = 'Point ({:.7f}  {:.7f})'.format(xydd[0], xydd[1])
                     img_count_geo += 1
                     in_bounds = self.eval_extent(lon, lat)
 
-                curr_image[IK.IMG_DATE] = img_date
+                # Populate date, location, location flag
                 curr_image[IK.LON] = lon
                 curr_image[IK.LAT] = lat
                 curr_image[IK.WKT] = wkt
@@ -644,7 +657,9 @@ class PicMapper(object):
                 curr_image[IK.Y_DEG] = ydeg
                 curr_image[IK.Y_SEC] = ysec
                 curr_image[IK.Y_MIN] = ymin
+                curr_image[IK.IMG_DATE] = img_date
                 curr_image[IK.IN_BNDS] = in_bounds
+
         self.all_data[ADK.IMG_GEO_COUNT] = img_count_geo
 
     # ...............................................
@@ -706,43 +721,36 @@ class PicMapper(object):
             resize_path (str): output path for resized images
             resize_width (int): width in pixels for resized images
         """
-        start_idx = len(self.image_path) + 1
         if not self.all_data:
             self.read_data_from_image_files()
         for arroyo, rfn_lst in self.all_data[ADK.ARROYO_META].items():
             # Check each image in arroyo
             for relfname in rfn_lst:
-                (arroyo_num, arroyo_name, dam_name, dam_date, picnum
-                 ) = parse_relative_fname(relfname)
+                (arroyo_num, arroyo_name, dam_name, dam_date, picnum) = parse_relative_fname(relfname)
 
                 # Get original file
                 orig_fname = os.path.join(self.image_path, relfname)
                 self._logger.info('Reading {} ...'.format(orig_fname))
 
                 # Get new filename
-                reldirs, fname = os.path.split(relfname)
-                basename, ext = os.path.splitext(fname)
-                # thumb_fname = '{}-{}'.format(basename, resize_width, ext)
-                # resize_fname = os.path.join(resize_path, reldirs, thumb_fname)
+                # reldirs, fname = os.path.split(relfname)
                 resize_fname = os.path.join(resize_path, relfname)
 
                 # Rewrite the image
                 reduce_image_size(
-                    orig_fname, resize_fname, width=resize_width,
-                    sample_method=Image.ANTIALIAS, overwrite=overwrite)
+                    orig_fname, resize_fname, width=resize_width, sample_method=Image.ANTIALIAS, overwrite=overwrite)
                 # Add resized file to metadata for original image file
-                rel_resize_fname = resize_fname[start_idx:]
-                self.all_data[ADK.IMAGE_META][relfname][IK.THUMB_PATH] = rel_resize_fname
+                self.all_data[ADK.IMAGE_META][relfname][IK.THUMB_PATH] = os.path.join(THUMB_DIR, relfname)
 
 
 # .............................................................................
 # .............................................................................
 # ...............................................
-if __name__ == '__main__':    
+if __name__ == '__main__':
 #     max_y = 35.45045
 #     min_y = 35.43479
 #     max_x = -106.05353
-#     min_x = -106.07259    
+#     min_x = -106.07259
     max_y = 35.45
     min_y = 35.42
     max_x = -106.04

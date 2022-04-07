@@ -13,5 +13,5 @@ PROJCS["NAD_1983_StatePlane_New_Mexico_Central_FIPS_3002_Feet",
         PARAMETER["Scale_Factor",0.9999],
         PARAMETER["Latitude_Of_Origin",31],
         UNIT["Foot_US",0.30480060960121924],
-        AUTHORITY["EPSG","102713"] 
+        AUTHORITY["EPSG","102713"]
         ]

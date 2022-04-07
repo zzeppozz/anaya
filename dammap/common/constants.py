@@ -56,7 +56,7 @@ class IMAGE_KEYS():
 
 SHP_FIELDS = [
     # Only for shapefiles
-    ('thumbpath', ogr.OFTString),
+    (IMAGE_KEYS.THUMB_PATH, ogr.OFTString),
     ('thumbname', ogr.OFTString),
     # Saved in dictionary and CSV
     (IMAGE_KEYS.FILE_PATH, ogr.OFTString),
@@ -97,7 +97,7 @@ CSV_FIELDS_SMALL = [
 # minY = 35.43479
 # maxX = -106.05353
 # minX = -106.07259
-# 
+#
 # dam_buffer = .0002
 # resize_width = 500
 
@@ -108,7 +108,7 @@ class IMG_META:
     X_DIR_KEY = "GPS GPSLongitudeRef"
     Y_KEY = "GPS GPSLatitude"
     Y_DIR_KEY = "GPS GPSLatitudeRef"
-    DATE_KEY_OPTS = ["GPS GPSDate", "Image DateTime"]
+    DATE_KEY_OPTS = ["GPS GPSDate", "Image DateTime", "EXIF DateTimeOriginal"]
 
 BAD_PATH = "/tank/anaya/dams/"
 BAD_FILES = [

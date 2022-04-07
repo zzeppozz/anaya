@@ -7,8 +7,3 @@ ogr2ogr \
     -f "ESRI Shapefile"  \
     anaya_dams_102713.shp \
     anaya_dams.shp
-
-
-
-
-

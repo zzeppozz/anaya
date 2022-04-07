@@ -83,5 +83,3 @@ try:
 finally:
     f.close()
     print('Completed list of duplicates: {}'.format(DELETEME_FILENAME))
-
-

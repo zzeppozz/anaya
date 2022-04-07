@@ -21,7 +21,7 @@ LOG_MAX = 52000000
 
 
 # .............................................................................
-def get_logger(outpath):
+def get_logger(outpath, logname=None):
     if not os.path.exists(outpath):
         try:
             os.makedirs(outpath)
@@ -29,11 +29,11 @@ def get_logger(outpath):
             raise
 
     level = logging.DEBUG
-    # get log filename
-    scriptname, _ = os.path.splitext(os.path.basename(__file__))
     secs = time.time()
     timestamp = "{}".format(time.strftime("%Y%m%d-%H%M", time.localtime(secs)))
-    logname = '{}.{}'.format(scriptname, timestamp)
+    if logname is None:
+        logname, _ = os.path.splitext(os.path.basename(__file__))
+    logname = '{}.{}'.format(logname, timestamp)
     logfname = os.path.join(outpath, logname + '.log')
     # create file handler
     file_log_handler = RotatingFileHandler(logfname, maxBytes=LOG_MAX, backupCount=2)
@@ -188,7 +188,7 @@ def parse_relative_fname(relfname):
                 tmp = fulldate.split("-")
 
                 try:
-                    dam_date = tuple([int(d) for d in tmp])
+                    dam_date = [int(d) for d in tmp]
                 except TypeError:
                     print('Date {} does not parse into 3'.format(fulldate))
                 else:
@@ -383,8 +383,7 @@ def get_csv_writer(datafile, delimiter, doAppend=True):
 
 
 # ...............................................
-def reduce_image_size(
-        infname, outfname, width, sample_method=Image.ANTIALIAS, overwrite=True, log=None):
+def reduce_image_size(infname, outfname, width, sample_method=Image.ANTIALIAS, overwrite=True, log=None):
     if ready_filename(outfname, overwrite=overwrite):
         try:
             img = Image.open(infname)
@@ -392,9 +391,8 @@ def reduce_image_size(
             logit(log, " *** Unable to open file {}, {}".format(infname, e))
         else:
             wpercent = (width / float(img.size[0]))
-            height = int((float(img.size[1]) * float(wpercent)))
+            height = int(float(img.size[1]) * float(wpercent))
             size = (width, height)
             img = img.resize(size, sample_method)
             img.save(outfname)
-            logit(log, 'Rewrote image {} to {}'.format(infname, outfname))
-
+            logit(log, 'Reduced image {} to {}'.format(infname, outfname))

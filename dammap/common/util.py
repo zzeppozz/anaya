@@ -308,7 +308,7 @@ def delete_file(file_name, delete_dir=False):
 # .............................................................................
 def get_csv_dict_reader(datafile, delimiter, fieldnames=None):
     try:
-        f = open(datafile, 'r')
+        f = open(datafile, "r", newline="")
         if fieldnames is None:
             header = next(f)
             tmpflds = header.split(delimiter)
@@ -357,7 +357,7 @@ def get_csv_dict_writer(csvfile, header, delimiter, fmode="w"):
 # .............................................................................
 def get_csv_reader(datafile, delimiter):
     try:
-        f = open(datafile, 'r')
+        f = open(datafile, 'r', newline="")
         reader = csv.reader(f, delimiter=delimiter)
     except Exception as e:
         raise Exception('Failed to read or open {}, ({})'
@@ -369,12 +369,12 @@ def get_csv_reader(datafile, delimiter):
 def get_csv_writer(datafile, delimiter, doAppend=True):
     csv.field_size_limit(sys.maxsize)
     if doAppend:
-        mode = 'ab'
+        mode = 'a'
     else:
-        mode = 'wb'
+        mode = 'w'
 
     try:
-        f = open(datafile, mode)
+        f = open(datafile, mode, newline="")
         writer = csv.writer(f, delimiter=delimiter)
     except Exception as e:
         raise Exception('Failed to read or open {}, ({})'

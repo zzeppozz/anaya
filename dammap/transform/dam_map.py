@@ -4,11 +4,11 @@ from osgeo import ogr, osr
 from PIL import Image
 
 from dammap.common.util import (
-    get_csv_dict_reader, get_csv_dict_writer, parse_relative_fname, get_logger, ready_filename, reduce_image_size)
+    get_csv_dict_reader, get_csv_writer, parse_relative_fname, get_logger, ready_filename, reduce_image_size)
 
 from dammap.common.constants import (
-    IMG_META, DELIMITER, ANC_DIR, THUMB_DIR, OUT_DIR, SAT_FNAME, RESIZE_WIDTH, ARROYO_COUNT, IMAGE_COUNT, SHP_FIELDS,
-    CSV_FIELDS)
+    IMG_META, IN_DIR, DELIMITER, ANC_DIR, THUMB_DIR, OUT_DIR, SAT_FNAME, RESIZE_WIDTH, ARROYO_COUNT, IMAGE_COUNT,
+    SHP_FIELDS)
 
 from dammap.common.constants import ALL_DATA_KEYS as ADK
 from dammap.common.constants import IMAGE_KEYS as IK
@@ -206,34 +206,26 @@ class PicMapper(object):
         return good_geo
 
     # ...............................................
-    def _create_feat_shp(self, lyr, rel_thumbfname, damdata):
-        if damdata[IK.IN_BNDS] is False:
-            pass
-        else:
-            yr = mo = day = '0'
-            try:
-                [yr, mo, day] = damdata[IK.IMG_DATE]
-            except:
-                self._logger.warn('damdata does not have a valid img_date')
-            relpth, basefname = os.path.split(rel_thumbfname)
+    def _format_date(self, date_seq):
+        yr = mo = day = '0'
+        try:
+            [yr, mo, day] = date_seq
+        except:
+            self._logger.warn(f"damdata does not have a valid date: {date_seq}")
+        return '{}-{}-{}'.format(yr, mo, day)
+
+    # ...............................................
+    def _create_feat_shp(self, lyr, damdata):
+        if damdata[IK.IN_BNDS] == 1:
             wkt = damdata[IK.WKT]
             feat = ogr.Feature( lyr.GetLayerDefn() )
             try:
-                feat.SetField(IK.ARROYO_NAME, damdata[IK.ARROYO_NAME])
-                feat.SetField(IK.THUMB_PATH, rel_thumbfname)
-                feat.SetField('thumbname', basefname)
-                feat.SetField(IK.IMG_DATE, '{}-{}-{}'.format(yr, mo, day))
-                feat.SetField(IK.X_DIR, damdata[IK.X_DEG])
-                feat.SetField(IK.X_MIN, damdata[IK.X_MIN])
-                feat.SetField(IK.X_SEC, damdata[IK.X_SEC])
-                feat.SetField(IK.X_DIR, damdata[IK.X_DIR])
-                feat.SetField(IK.Y_DEG, damdata[IK.Y_DEG])
-                feat.SetField(IK.Y_MIN, damdata[IK.Y_MIN])
-                feat.SetField(IK.Y_SEC, damdata[IK.Y_SEC])
-                feat.SetField(IK.Y_DIR, damdata[IK.Y_DIR])
-                feat.SetField(IK.LON, damdata[IK.LON])
-                feat.SetField(IK.LAT, damdata[IK.LAT])
-                feat.SetField(IK.WKT, wkt)
+                for fldname, _fldtype in SHP_FIELDS:
+                    if fldname in (IK.IMG_DATE, IK.DAM_DATE):
+                        datestr = self._format_date(damdata[fldname])
+                        feat.SetField(fldname, datestr)
+                    else:
+                        feat.SetField(fldname, damdata[fldname])
                 geom = ogr.CreateGeometryFromWkt(wkt)
                 feat.SetGeometryDirectly(geom)
             except Exception as e:
@@ -374,12 +366,27 @@ class PicMapper(object):
         return all_coords
 
     # ...............................................
+    def _write_row(self, csvwriter, fields, data_dict):
+        row = []
+        for k in fields:
+            if k in (IK.IMG_DATE, IK.DAM_DATE):
+                datestr = self._format_date(data_dict[k])
+                row.append(datestr)
+            else:
+                row.append(data_dict[k])
+        try:
+            csvwriter.writerow(row)
+        except Exception as e:
+            self._logger.error(f"Failed to write row {row}: {e}")
+
+    # ...............................................
     def write_outputs(self, csvfname=None, shpfname=None, kmlfname=None, overwrite=True):
         csvwriter = csvf = kmlf = dataset = lyr = None
         # Open one or more
         if csvfname is not None:
+            csvfields = [fldname for fldname, tp in SHP_FIELDS]
             if ready_filename(csvfname, overwrite=overwrite):
-                csvwriter, csvf = get_csv_dict_writer(csvfname, self.all_data[ADK.IMAGE_META].keys(), DELIMITER)
+                csvwriter, csvf = get_csv_writer(csvfname, DELIMITER, doAppend=False)
         if kmlfname is not None:
             if ready_filename(kmlfname, overwrite=overwrite):
                 kmlf = self._open_kml_file(kmlfname)
@@ -392,19 +399,18 @@ class PicMapper(object):
             # CSV file
             if csvwriter:
                 try:
-                    csvwriter.writerow(damdata)
+                    self._write_row(csvwriter, csvfields, damdata)
                 except Exception as e:
                     self._logger.error("Failed to write {}, {}".format(damdata, e))
             if damdata[IK.IN_BNDS] == 1:
                 # Thumbnail only relevant to geo-files
                 rel_thumbfname = damdata[IK.THUMB_PATH]
-                # rel_thumbfname = os.path.join(THUMB_DIR, relfname)
                 # KML file
                 if kmlf:
                     self._create_lookat_kml(kmlf, rel_thumbfname, damdata)
                 # Shapefile
                 if dataset and lyr:
-                    self._create_feat_shp(lyr, rel_thumbfname, damdata)
+                    self._create_feat_shp(lyr, damdata)
 
         # Close open files
         if csvf:
@@ -442,7 +448,15 @@ class PicMapper(object):
 
     # ...............................................
     def eval_extent(self, x: float, y: float) -> int:
-        """Return 1 if point is within bbox, 0 if outside."""
+        """Return 1 if point is within bbox, 0 if outside.
+
+        Args:
+            x (float): Longitude value
+            y (float): Latitude value
+
+        Returns:
+            in_bounds (int): flag indicating if the values are within the expected extent.
+        """
         in_bounds = 1
         # in assigned bbox (min_x, min_y, max_x, max_y)?
         if (x < self.bbox[0] or
@@ -494,6 +508,12 @@ class PicMapper(object):
 
     # ...............................................
     def read_csv_data(self, csv_fname, delimiter=DELIMITER):
+        """Read a CSV file containing image metadata to populate all_data dictionary.
+
+        Args:
+            csv_fname (str): full filename of CSV file.
+            delimiter (char): delimiter between fields in CSV file.
+        """
         start_idx = len(self.image_path) + 1
         self.all_data = {}
         arroyos = {}
@@ -548,10 +568,15 @@ class PicMapper(object):
 
     # ...............................................
     def test_extent(self, bbox):
+        """Compare expected extent against bbox.
+
+        Args:
+            bbox (list): list of minX, minY, maxX, maxY
+        """
         self._logger.info(
             'Given: {} {} {} {}'.format(
                 self.bbox[0], self.bbox[1], self.bbox[2], self.bbox[3]))
-        self._logger.info('Computed: {}'.format(pm.extent))
+        self._logger.info('Computed: {}'.format(self.extent))
 
     # ...............................................
     def read_metadata_from_directory(self):
@@ -592,7 +617,7 @@ class PicMapper(object):
 
                     # Add image metadata to image_meta dict
                     self.all_data[ADK.IMAGE_META][relfname] = {
-                        IK.FILE_PATH: fullfname,
+                        IK.FILE_PATH: os.path.join(IN_DIR, relfname),
                         IK.BASE_NAME: fname,
                         IK.ARROYO_NAME: arroyo_name,
                         IK.ARROYO_NUM: arroyo_num,
@@ -714,12 +739,13 @@ class PicMapper(object):
                 self.all_data[ADK.IMG_COUNT], IMAGE_COUNT))
 
     # ...............................................
-    def resize_images(self, resize_path, resize_width=RESIZE_WIDTH, overwrite=True):
+    def resize_images(self, outpath, resize_width=RESIZE_WIDTH, overwrite=True):
         """Resize all original images in the image_path tree.
 
         Args:
-            resize_path (str): output path for resized images
+            outpath (str): output path
             resize_width (int): width in pixels for resized images
+            overwrite (bool): flag indicating whether to rewrite existing resized images.
         """
         if not self.all_data:
             self.read_data_from_image_files()
@@ -728,19 +754,15 @@ class PicMapper(object):
             for relfname in rfn_lst:
                 (arroyo_num, arroyo_name, dam_name, dam_date, picnum) = parse_relative_fname(relfname)
 
-                # Get original file
+                # Get filenames
                 orig_fname = os.path.join(self.image_path, relfname)
-                self._logger.info('Reading {} ...'.format(orig_fname))
-
-                # Get new filename
-                # reldirs, fname = os.path.split(relfname)
-                resize_fname = os.path.join(resize_path, relfname)
+                resize_fname = os.path.join(outpath, THUMB_DIR, relfname)
 
                 # Rewrite the image
                 reduce_image_size(
                     orig_fname, resize_fname, width=resize_width, sample_method=Image.ANTIALIAS, overwrite=overwrite)
                 # Add resized file to metadata for original image file
-                self.all_data[ADK.IMAGE_META][relfname][IK.THUMB_PATH] = os.path.join(THUMB_DIR, relfname)
+                self.all_data[ADK.IMAGE_META][relfname][IK.THUMB_PATH] = os.path.join(OUT_DIR, THUMB_DIR, relfname)
 
 
 # .............................................................................

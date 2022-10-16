@@ -3,14 +3,14 @@ import argparse
 import os
 import time
 
-from dammap.common.constants import (
-    IN_DIR, OUT_DIR, THUMB_DIR, CSV_FIELDS, CSV_FIELDS_SMALL)
-from dammap.common.util import (fix_names_in_tree, get_logger, test_names_in_tree)
+from dammap.common.constants import (IN_DIR, OUT_DIR, THUMB_DIR)
+from dammap.common.util import (get_logger)
 from transform.dam_map import PicMapper
 
 kml_flag = False
 shp_flag = False
 
+# ...............................................
 def stamp(msg):
     t = time.localtime()
     print('## {} {}-{}-{} {}:{}:{}'.format(
@@ -68,7 +68,7 @@ if __name__ == "__main__":
     stamp('Read image files')
 
     # Rewrite thumbnails of all images
-    pm.resize_images(resize_path, overwrite=False)
+    pm.resize_images(outpath, overwrite=False)
     stamp('Wrote thumbnails')
 
     # Write data to CSV, Shapefile, KML

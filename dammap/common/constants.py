@@ -55,11 +55,9 @@ class IMAGE_KEYS():
     IN_BNDS = "in_bounds"
 
 SHP_FIELDS = [
-    # Only for shapefiles
-    (IMAGE_KEYS.THUMB_PATH, ogr.OFTString),
-    ('thumbname', ogr.OFTString),
-    # Saved in dictionary and CSV
     (IMAGE_KEYS.FILE_PATH, ogr.OFTString),
+    (IMAGE_KEYS.THUMB_PATH, ogr.OFTString),
+    (IMAGE_KEYS.BASE_NAME, ogr.OFTString),
     (IMAGE_KEYS.ARROYO_NAME, ogr.OFTString),
     (IMAGE_KEYS.ARROYO_NUM, ogr.OFTInteger),
     (IMAGE_KEYS.DAM_NAME, ogr.OFTString),
@@ -70,27 +68,15 @@ SHP_FIELDS = [
     (IMAGE_KEYS.LAT, ogr.OFTReal),
     (IMAGE_KEYS.WKT, ogr.OFTString),
     (IMAGE_KEYS.X_DIR, ogr.OFTString),
-    (IMAGE_KEYS.X_DEG, ogr.OFTReal),
-    (IMAGE_KEYS.X_MIN, ogr.OFTReal),
+    (IMAGE_KEYS.X_DEG, ogr.OFTInteger),
+    (IMAGE_KEYS.X_MIN, ogr.OFTInteger),
     (IMAGE_KEYS.X_SEC, ogr.OFTReal),
     (IMAGE_KEYS.Y_DIR, ogr.OFTString),
-    (IMAGE_KEYS.Y_DEG, ogr.OFTReal),
-    (IMAGE_KEYS.Y_MIN, ogr.OFTReal),
+    (IMAGE_KEYS.Y_DEG, ogr.OFTInteger),
+    (IMAGE_KEYS.Y_MIN, ogr.OFTInteger),
     (IMAGE_KEYS.Y_SEC, ogr.OFTReal),
     (IMAGE_KEYS.IN_BNDS, ogr.OFTInteger)
     ]
-
-
-CSV_FIELDS = [f[0] for f in SHP_FIELDS]
-
-CSV_FIELDS_SMALL = [
-    IMAGE_KEYS.FILE_PATH,
-    IMAGE_KEYS.ARROYO_NAME,
-    IMAGE_KEYS.ARROYO_NUM,
-    IMAGE_KEYS.DAM_NAME,
-    IMAGE_KEYS.DAM_NUM,
-    IMAGE_KEYS.DAM_DATE
-]
 
 
 # maxY = 35.45045

@@ -390,9 +390,13 @@ def reduce_image_size(infname, outfname, width, sample_method=Image.ANTIALIAS, o
         except Exception as e:
             logit(log, " *** Unable to open file {}, {}".format(infname, e))
         else:
-            wpercent = (width / float(img.size[0]))
-            height = int(float(img.size[1]) * float(wpercent))
-            size = (width, height)
-            img = img.resize(size, sample_method)
-            img.save(outfname)
-            logit(log, 'Reduced image {} to {}'.format(infname, outfname))
+            (orig_w, _) = img.size
+            if orig_w <= width:
+                logit(log, f"Image {infname} width {orig_w} cannot be reduced")
+            else:
+                wpercent = (width / float(img.size[0]))
+                height = int(float(img.size[1]) * float(wpercent))
+                size = (width, height)
+                img = img.resize(size, sample_method)
+                img.save(outfname)
+                logit(log, 'Reduced image {} to {}'.format(infname, outfname))

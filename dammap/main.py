@@ -68,7 +68,7 @@ if __name__ == "__main__":
     stamp('Read image files')
 
     # Rewrite thumbnails of all images
-    pm.resize_images(outpath, overwrite=False)
+    pm.resize_images(outpath, resize_width=2000, overwrite=False)
     stamp('Wrote thumbnails')
 
     # Write data to CSV, Shapefile, KML

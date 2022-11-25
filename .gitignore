@@ -8,9 +8,13 @@ RPMS/x86_64
 # ignore pycharm files
 .idea/
 
+# virtual environment 
+.venv/
+
 # ignore python files
 python.mk
 *.pyc
 
 dam_map.log
 .DS_Store
+venv

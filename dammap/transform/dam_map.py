@@ -3,17 +3,19 @@ import os
 from osgeo import ogr, osr
 from PIL import Image
 
-from dammap.common.util import (
-    get_csv_dict_reader, get_csv_writer, parse_relative_fname, get_logger, ready_filename, reduce_image_size)
-
 from dammap.common.constants import (
     IMG_META, IN_DIR, DELIMITER, ANC_DIR, THUMB_DIR, OUT_DIR, SAT_FNAME, RESIZE_WIDTH, ARROYO_COUNT, IMAGE_COUNT,
-    SHP_FIELDS)
+    SHP_FIELDS, SOME_DUPES)
+from dammap.common.util import (
+    get_csv_dict_reader, get_csv_writer, get_logger,
+    logit, stamp, ready_filename, reduce_image_size)
+from dammap.common.dammeta import DamMeta
 
 from dammap.common.constants import ALL_DATA_KEYS as ADK
 from dammap.common.constants import IMAGE_KEYS as IK
 
 # DELETE_CHARS = ['\'', ',', '"', ' ', '(', ')', '_']
+
 
 # .............................................................................
 class PicMapper(object):
@@ -47,86 +49,81 @@ class PicMapper(object):
             logger = get_logger(os.path.join(self.base_path, OUT_DIR))
         self._logger = logger
 
-    # ...............................................
-    @property
-    def bounds(self):
-        return (self._min_x, self._min_y, self._max_x, self._max_y)
-
-    # ...............................................
-    def _get_val_from_alternative_keys(self, tags, alternative_keys):
-        # Get value
-        for key in alternative_keys:
-            try:
-                valstr = tags[key].values
-            except KeyError:
-                valstr = None
-            else:
-                # If date tag, possible space between date and time
-                if key in IMG_META.DATE_KEY_OPTS:
-                    try:
-                        valstr.index(" ")
-                    except ValueError:
-                        pass
-                    else:
-                        valstr = valstr.split(" ")[0]
-                break
-
-        return valstr
-
-    # ...............................................
-    def _get_date(self, tags):
-        # Get date
-        dtstr = self._get_val_from_alternative_keys(tags, IMG_META.DATE_KEY_OPTS)
-
-        if dtstr is not None:
-            try:
-                return [int(x) for x in dtstr.split(':')]
-            except:
-                self._logger.error(f"datestr {dtstr} cannot be parsed into integers")
-        return []
-
-    # ...............................................
-    def _get_location_vals(self, tags, locKey, dirKey, negativeIndicator):
-        dd = degrees = minutes = seconds = nsew = None
-        isNegative = False
-        # Get longitude or latitude
-        try:
-            degObj, minObj, secObj = tags[locKey].values
-        except KeyError:
-            gpskeys = [k for k in tags.keys() if k.startswith("GPS")]
-            self._logger.error(f"Missing {locKey} in {gpskeys}")
-            # raise
-        else:
-            nsew = tags[dirKey].printable
-            if nsew == negativeIndicator:
-                isNegative = True
-            # Convert to float
-            degrees = degObj.num
-            minutes = minObj.num
-            seconds = float(secObj.real)
-            # Convert to decimal degrees
-            dd = (seconds/3600) + (minutes/60) + degrees
-            if isNegative:
-                dd = -1 * dd
-        return dd, degrees, minutes, seconds, nsew
-
-    # ...............................................
-    def _get_dd(self, tags):
-        dd = xdms = ydms = None
-        xdd, xdeg, xmin, xsec, xdir = self._get_location_vals(
-            tags, IMG_META.X_KEY, IMG_META.X_DIR_KEY, 'W')
-        ydd, ydeg, ymin, ysec, ydir = self._get_location_vals(
-            tags, IMG_META.Y_KEY, IMG_META.Y_DIR_KEY, 'S')
-
-        if None in (xdd, xdeg, xmin, xsec, xdir, ydd, ydeg, ymin, ysec, ydir):
-            self._logger.error(f"Coordinates cannot be parsed")
-        else:
-            # Convert to desired format
-            dd = (xdd, ydd)
-            xdms = (xdeg, xmin, xsec, xdir)
-            ydms = (ydeg, ymin, ysec, ydir)
-
-        return dd, xdms, ydms
+    # # ...............................................
+    # def _get_val_from_alternative_keys(self, tags, alternative_keys):
+    #     # Get value
+    #     for key in alternative_keys:
+    #         try:
+    #             valstr = tags[key].values
+    #         except KeyError:
+    #             valstr = None
+    #         else:
+    #             # If date tag, possible space between date and time
+    #             if key in IMG_META.DATE_KEY_OPTS:
+    #                 try:
+    #                     valstr.index(" ")
+    #                 except ValueError:
+    #                     pass
+    #                 else:
+    #                     valstr = valstr.split(" ")[0]
+    #             break
+    #
+    #     return valstr
+    #
+    # # ...............................................
+    # def _get_date(self, tags):
+    #     # Get date
+    #     dtstr = self._get_val_from_alternative_keys(tags, IMG_META.DATE_KEY_OPTS)
+    #
+    #     if dtstr is not None:
+    #         try:
+    #             return [int(x) for x in dtstr.split(':')]
+    #         except:
+    #             self._logger.error(f"datestr {dtstr} cannot be parsed into integers")
+    #     return []
+    #
+    # # ...............................................
+    # def _get_location_vals(self, tags, locKey, dirKey, negativeIndicator):
+    #     dd = degrees = minutes = seconds = nsew = None
+    #     isNegative = False
+    #     # Get longitude or latitude
+    #     try:
+    #         degObj, minObj, secObj = tags[locKey].values
+    #     except KeyError:
+    #         gpskeys = [k for k in tags.keys() if k.startswith("GPS")]
+    #         self._logger.error(f"Missing {locKey} in {gpskeys}")
+    #         # raise
+    #     else:
+    #         nsew = tags[dirKey].printable
+    #         if nsew == negativeIndicator:
+    #             isNegative = True
+    #         # Convert to float
+    #         degrees = degObj.num
+    #         minutes = minObj.num
+    #         seconds = float(secObj.real)
+    #         # Convert to decimal degrees
+    #         dd = (seconds/3600) + (minutes/60) + degrees
+    #         if isNegative:
+    #             dd = -1 * dd
+    #     return dd, degrees, minutes, seconds, nsew
+    #
+    # # ...............................................
+    # def _get_dd(self, tags):
+    #     dd = xdms = ydms = None
+    #     xdd, xdeg, xmin, xsec, xdir = self._get_location_vals(
+    #         tags, IMG_META.X_KEY, IMG_META.X_DIR_KEY, 'W')
+    #     ydd, ydeg, ymin, ysec, ydir = self._get_location_vals(
+    #         tags, IMG_META.Y_KEY, IMG_META.Y_DIR_KEY, 'S')
+    #
+    #     if None in (xdd, xdeg, xmin, xsec, xdir, ydd, ydeg, ymin, ysec, ydir):
+    #         self._logger.error(f"Coordinates cannot be parsed")
+    #     else:
+    #         # Convert to desired format
+    #         dd = (xdd, ydd)
+    #         xdms = (xdeg, xmin, xsec, xdir)
+    #         ydms = (ydeg, ymin, ysec, ydir)
+    #
+    #     return dd, xdms, ydms
 
     # ...............................................
     def _open_kml_file(self, fname):
@@ -421,30 +418,30 @@ class PicMapper(object):
             dataset.Destroy()
             self._logger.info('Closed/wrote dataset {}'.format(shpfname))
 
-    # ...............................................
-    def get_image_metadata(self, fullname):
-        tags = date_tuple = dd = xdms = ydms = None
-        # Read image metadata
-        try:
-            # Open file in binary mode
-            f = open(fullname, 'rb')
-            # Get Exif tags
-            tags = exifread.process_file(f)
-        except Exception as e:
-            self._logger.error('{}: Unable to read image metadata, {}'.format(
-                fullname, e))
-        finally:
-            try:
-                f.close()
-            except:
-                pass
-        # Parse image metadata
-        if tags:
-            dd, xdms, ydms = self._get_dd(tags)
-            date_tuple = self._get_date(tags)
-        else:
-            self._logger.error(f'{fullname}: exifread found no tags')
-        return date_tuple, dd, xdms, ydms
+    # # ...............................................
+    # def get_image_metadata(self, fullname):
+    #     tags = date_tuple = dd = xdms = ydms = None
+    #     # Read image metadata
+    #     try:
+    #         # Open file in binary mode
+    #         f = open(fullname, 'rb')
+    #         # Get Exif tags
+    #         tags = exifread.process_file(f)
+    #     except Exception as e:
+    #         self._logger.error('{}: Unable to read image metadata, {}'.format(
+    #             fullname, e))
+    #     finally:
+    #         try:
+    #             f.close()
+    #         except:
+    #             pass
+    #     # Parse image metadata
+    #     if tags:
+    #         dd, xdms, ydms = self._get_dd(tags)
+    #         date_tuple = self._get_date(tags)
+    #     else:
+    #         self._logger.error(f'{fullname}: exifread found no tags')
+    #     return date_tuple, dd, xdms, ydms
 
     # ...............................................
     def eval_extent(self, x: float, y: float) -> int:
@@ -612,30 +609,74 @@ class PicMapper(object):
 
                     # Get metadata from directory and filename
                     relfname = fullfname[start_idx:]
-                    (arroyo_num, arroyo_name, dam_name, dam_date, picnum
-                     ) = parse_relative_fname(relfname)
+                    dimg = DamMeta(fullfname, relfname)
+                    # (arroyo_num, arroyo_name, dam_name, dam_date, picnum
+                    #  ) = parse_relative_fname(relfname)
 
-                    # Add image metadata to image_meta dict
-                    self.all_data[ADK.IMAGE_META][relfname] = {
-                        IK.FILE_PATH: os.path.join(IN_DIR, relfname),
-                        IK.BASE_NAME: fname,
-                        IK.ARROYO_NAME: arroyo_name,
-                        IK.ARROYO_NUM: arroyo_num,
-                        IK.DAM_NAME: dam_name,
-                        IK.DAM_NUM: picnum,
-                        IK.DAM_DATE: dam_date}
+                    # Add image metadata object to image_meta list
+                    self.all_data[ADK.IMAGE_META][relfname] = dimg
 
                     # Add image filename to arroyo_meta dict
                     try:
-                        self.all_data[ADK.ARROYO_META][arroyo_name].append(relfname)
+                        self.all_data[ADK.ARROYO_META][dimg.arroyo_name].append(relfname)
                     except:
-                        self.all_data[ADK.ARROYO_META][arroyo_name] = [relfname]
+                        self.all_data[ADK.ARROYO_META][dimg.arroyo_name] = [relfname]
+
         self.all_data[ADK.ARROYO_COUNT] = len(self.all_data[ADK.ARROYO_META])
 
     # # ...............................................
-    # def compare_all_data(self, other_data):
-    #     for akey, aval in self.all_data.items():
-    #         if other_data[akey] ==
+    # def read_metadata_from_directory_old(self):
+    #     """Read metadata from the directory names and filenames within image_path.
+    #
+    #     Results in:
+    #         all_data dictionary with keys/values:
+    #             'base_path': base path containing input and output directories
+    #             'arroyo_meta': {arroyo_name: [rel_fname, ...], ...}
+    #             'image_meta': {rel_fname: {image_metadata}, ...}
+    #             'out_of_range': {rel_fname: {image_metadata}, ...}
+    #             'img_count': total number of images
+    #             'img_count_geo': number of georeferenced and in-bounds images
+    #     """
+    #     start_idx = len(self.image_path) + 1
+    #     self.all_data = {
+    #         ADK.BASE_PATH: self.base_path,
+    #         ADK.ARROYO_META: {},
+    #         ADK.ARROYO_COUNT: 0,
+    #         ADK.IMAGE_META: {},
+    #         ADK.IMAGE_OUT_OF_RANGE: {},
+    #         ADK.IMG_COUNT: 0,
+    #         ADK.IMG_GEO_COUNT: 0
+    #     }
+    #     arroyos = {}
+    #     img_count_geo = 0
+    #     for root, _, files in os.walk(self.image_path):
+    #         for fname in files:
+    #             # Read only non-hidden jpg files
+    #             if not fname.startswith(".") and fname.lower().endswith("jpg"):
+    #                 self.all_data[ADK.IMG_COUNT] += 1
+    #                 fullfname = os.path.join(root, fname)
+    #
+    #                 # Get metadata from directory and filename
+    #                 relfname = fullfname[start_idx:]
+    #                 (arroyo_num, arroyo_name, dam_name, dam_date, picnum
+    #                  ) = parse_relative_fname(relfname)
+    #
+    #                 # Add image metadata to image_meta dict
+    #                 self.all_data[ADK.IMAGE_META][relfname] = {
+    #                     IK.FILE_PATH: os.path.join(IN_DIR, relfname),
+    #                     IK.BASE_NAME: fname,
+    #                     IK.ARROYO_NAME: arroyo_name,
+    #                     IK.ARROYO_NUM: arroyo_num,
+    #                     IK.DAM_NAME: dam_name,
+    #                     IK.DAM_NUM: picnum,
+    #                     IK.DAM_DATE: dam_date}
+    #
+    #                 # Add image filename to arroyo_meta dict
+    #                 try:
+    #                     self.all_data[ADK.ARROYO_META][arroyo_name].append(relfname)
+    #                 except:
+    #                     self.all_data[ADK.ARROYO_META][arroyo_name] = [relfname]
+    #     self.all_data[ADK.ARROYO_COUNT] = len(self.all_data[ADK.ARROYO_META])
 
     # ...............................................
     def read_data_from_image_files(self):
@@ -646,46 +687,95 @@ class PicMapper(object):
         if not self.all_data:
             self.read_metadata_from_directory()
 
-        for arroyo, rfn_lst in self.all_data[ADK.ARROYO_META].items():
-            # Check each image in arroyo
-            for relfname in rfn_lst:
-                xdeg = xmin = xsec = xdir = ydeg = ymin = ysec = ydir = lon = lat = wkt = ''
-                curr_image = self.all_data[ADK.IMAGE_META][relfname]
-
-                # Read metadata from image file
-                fullfname = os.path.join(self.image_path, relfname)
-                img_date, xydd, xdms, ydms = self.get_image_metadata(fullfname)
-
-
-                # Test geodata
-                if None in (xydd, xdms, ydms):
-                    in_bounds = 0
-                    self._logger.warn('Failed to return decimal degrees for {}'.format(relfname))
-                else:
-                    (xdeg, xmin, xsec, xdir) = xdms
-                    (ydeg, ymin, ysec, ydir) = ydms
-                    lon = xydd[0]
-                    lat = xydd[1]
-                    wkt = 'Point ({:.7f}  {:.7f})'.format(xydd[0], xydd[1])
-                    img_count_geo += 1
-                    in_bounds = self.eval_extent(lon, lat)
-
-                # Populate date, location, location flag
-                curr_image[IK.LON] = lon
-                curr_image[IK.LAT] = lat
-                curr_image[IK.WKT] = wkt
-                curr_image[IK.X_DIR] = xdir
-                curr_image[IK.X_DEG] = xdeg
-                curr_image[IK.X_MIN] = xmin
-                curr_image[IK.X_SEC] = xsec
-                curr_image[IK.Y_DIR] = ydir
-                curr_image[IK.Y_DEG] = ydeg
-                curr_image[IK.Y_SEC] = ysec
-                curr_image[IK.Y_MIN] = ymin
-                curr_image[IK.IMG_DATE] = img_date
-                curr_image[IK.IN_BNDS] = in_bounds
+        for relfname, dimg in self.all_data[ADK.IMAGE_META].items():
+            # Check each image
+            # Test geodata
+            if not dimg.dd_ok:
+                in_bounds = 0
+                self._logger.warn('Failed to return decimal degrees for {}'.format(relfname))
+            else:
+                img_count_geo += 1
+                dimg.in_bounds = self.eval_extent(dimg.longitude, dimg.latitude)
 
         self.all_data[ADK.IMG_GEO_COUNT] = img_count_geo
+
+
+    # # ...............................................
+    # def read_data_from_image_files_old(self):
+    #     """Read metadata from all image files within the BASE_PATH """
+    #     start_idx = len(self.image_path) + 1
+    #     img_meta = {}
+    #     img_count_geo = 0
+    #     if not self.all_data:
+    #         self.read_metadata_from_directory()
+    #
+    #     unique_coordinates = {"Bad point data": []}
+    #     # dupes = {"bad_coords": []}
+    #     # for i in range(len(SOME_DUPES)):
+    #     #     dupes[f"group_{i}"] = []
+    #     #
+    #     for arroyo, rfn_lst in self.all_data[ADK.ARROYO_META].items():
+    #         # Check each image in arroyo
+    #         for relfname in rfn_lst:
+    #             xdeg = xmin = xsec = xdir = ydeg = ymin = ysec = ydir = lon = lat = wkt = ''
+    #             curr_image = self.all_data[ADK.IMAGE_META][relfname]
+    #
+    #             # Read metadata from image file
+    #             fullfname = os.path.join(self.image_path, relfname)
+    #             img_date, xydd, xdms, ydms = self.get_image_metadata(fullfname)
+    #
+    #             # Test geodata
+    #             if None in (xydd, xdms, ydms):
+    #                 in_bounds = 0
+    #                 self._logger.warn('Failed to return decimal degrees for {}'.format(relfname))
+    #                 unique_coordinates["Bad point data"].append(relfname)
+    #             else:
+    #                 (xdeg, xmin, xsec, xdir) = xdms
+    #                 (ydeg, ymin, ysec, ydir) = ydms
+    #                 lon = xydd[0]
+    #                 lat = xydd[1]
+    #                 wkt = 'Point ({:.7f}  {:.7f})'.format(xydd[0], xydd[1])
+    #                 img_count_geo += 1
+    #                 in_bounds = self.eval_extent(lon, lat)
+    #                 try:
+    #                     unique_coordinates[wkt].append(relfname)
+    #                 except KeyError:
+    #                     unique_coordinates[wkt] = [relfname]
+    #
+    #             # Check coordinates in identified duplicates in original image
+    #             partname, _ = os.path.splitext(relfname)
+    #             for i in range(len(SOME_DUPES)):
+    #                 if partname in SOME_DUPES[i]:
+    #                     self._logger.error(f"WTF: {relfname} in group {i} with lon {lon} and lat {lat}")
+    #                     dupes[f"group_{i}"].append(relfname)
+    #
+    #             # Populate date, location, location flag
+    #             curr_image[IK.LON] = lon
+    #             curr_image[IK.LAT] = lat
+    #             curr_image[IK.WKT] = wkt
+    #             curr_image[IK.X_DIR] = xdir
+    #             curr_image[IK.X_DEG] = xdeg
+    #             curr_image[IK.X_MIN] = xmin
+    #             curr_image[IK.X_SEC] = xsec
+    #             curr_image[IK.Y_DIR] = ydir
+    #             curr_image[IK.Y_DEG] = ydeg
+    #             curr_image[IK.Y_SEC] = ysec
+    #             curr_image[IK.Y_MIN] = ymin
+    #             curr_image[IK.IMG_DATE] = img_date
+    #             curr_image[IK.IN_BNDS] = in_bounds
+    #
+    #     self.all_data[ADK.IMG_GEO_COUNT] = img_count_geo
+    #
+    #     self._logger.info("Duplicates:")
+    #     for key, vals in dupes.items():
+    #         self._logger.info(f"{key} has {len(vals)} problems")
+    #         self._logger.info(f"   {vals}")
+    #
+    #     self._logger.info("Coordinates:")
+    #     for key, vals in unique_coordinates.items():
+    #         if len(vals) > 1:
+    #             self._logger.info(f"{key} has {len(vals)} problems")
+    #             self._logger.info(f"   {vals}")
 
     # ...............................................
     def test_counts(self):
@@ -740,6 +830,26 @@ class PicMapper(object):
 
     # ...............................................
     def resize_images(self, outpath, resize_width=RESIZE_WIDTH, overwrite=True):
+        """Resize all original images in the image_path tree.
+
+        Args:
+            outpath (str): output path
+            resize_width (int): width in pixels for resized images
+            overwrite (bool): flag indicating whether to rewrite existing resized images.
+        """
+        if not self.all_data:
+            self.read_data_from_image_files()
+        for relfname, dimg in self.all_data[ADK.IMAGE_META].items():
+            resize_fname = os.path.join(outpath, THUMB_DIR, dimg.relfname)
+
+            # Rewrite the image
+            reduce_image_size(
+                dimg.fullpath, resize_fname, width=resize_width, sample_method=Image.ANTIALIAS, overwrite=overwrite)
+
+            dimg.thumbpath = resize_fname
+
+    # ...............................................
+    def resize_images_old(self, outpath, resize_width=RESIZE_WIDTH, overwrite=True):
         """Resize all original images in the image_path tree.
 
         Args:

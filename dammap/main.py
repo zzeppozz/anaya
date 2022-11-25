@@ -4,18 +4,18 @@ import os
 import time
 
 from dammap.common.constants import (IN_DIR, OUT_DIR, THUMB_DIR)
-from dammap.common.util import (get_logger)
+from dammap.common.util import (get_logger, stamp)
 from transform.dam_map import PicMapper
 
 kml_flag = False
 shp_flag = False
 
-# ...............................................
-def stamp(msg):
-    t = time.localtime()
-    print('## {} {}-{}-{} {}:{}:{}'.format(
-        msg, t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))
-
+# # ...............................................
+# def stamp(msg):
+#     t = time.localtime()
+#     print('## {} {}-{}-{} {}:{}:{}'.format(
+#         msg, t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))
+#
 
 # ...............................................
 if __name__ == "__main__":
@@ -57,23 +57,23 @@ if __name__ == "__main__":
 
     pm = PicMapper(inpath, buffer_distance=dam_buffer, bbox=bbox, logger=logger)
 
-    stamp('Start')
+    stamp(logger, 'Start')
 
     # Sets all_data dictionary on object
     pm.read_metadata_from_directory()
-    stamp('Read filenames')
+    stamp(logger, 'Read filenames')
 
     # Updates all images in the dictionary from the referenced files
     pm.read_data_from_image_files()
-    stamp('Read image files')
+    stamp(logger, 'Read image files')
 
-    # Rewrite thumbnails of all images
-    pm.resize_images(outpath, resize_width=2000, overwrite=False)
-    stamp('Wrote thumbnails')
+    # # Rewrite thumbnails of all images
+    pm.resize_images(outpath, resize_width=800, overwrite=True)
+    stamp(logger, 'Wrote thumbnails')
 
     # Write data to CSV, Shapefile, KML
     pm.write_outputs(csvfname=csv_fname, shpfname=shp_fname)
-    stamp('Wrote shapefile')
+    stamp(logger, 'Wrote shapefile')
     # # pm.write_outputs(kmlfname=kml_fname)
     # # stamp('Wrote KML')
     #
@@ -95,7 +95,7 @@ if __name__ == "__main__":
     # # pm.resize_images(resize_width=500, resize_path=resize_path)
     #
     # print('Given: {}'.format(pm.bbox))
-    # print('Computed: {}'.format(pm.bounds))
+    # print('Computed: {}'.format(pm.extent))
 
 """
 

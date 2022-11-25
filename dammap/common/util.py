@@ -8,7 +8,7 @@ from PIL import Image
 import sys
 import time
 
-from dammap.common.constants import SEPARATOR
+# from dammap.common.constants import SEPARATOR
 
 LOG_FORMAT = ' '.join(["%(asctime)s",
                        "%(threadName)s.%(module)s.%(funcName)s",
@@ -35,15 +35,17 @@ def get_logger(outpath, logname=None):
         logname, _ = os.path.splitext(os.path.basename(__file__))
     logname = '{}.{}'.format(logname, timestamp)
     logfname = os.path.join(outpath, logname + '.log')
+    # get logger
+    log = logging.getLogger(logname)
+    log.setLevel(level)
     # create file handler
     file_log_handler = RotatingFileHandler(logfname, maxBytes=LOG_MAX, backupCount=2)
     file_log_handler.setLevel(level)
     formatter = logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT)
     file_log_handler.setFormatter(formatter)
-    # get logger
-    log = logging.getLogger(logname)
-    log.setLevel(level)
     log.addHandler(file_log_handler)
+    # add a console logger
+    log.addHandler(logging.StreamHandler(stream=sys.stdout))
     return log
 
 # .............................................................................
@@ -52,6 +54,13 @@ def logit(log, msg):
         log.warn(msg)
     else:
         print(msg)
+
+# ...............................................
+def stamp(log, msg):
+    t = time.localtime()
+    log.info('## {} {}-{}-{} {}:{}:{}'.format(
+        msg, t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))
+
 
 # .............................................................................
 def _format_filename(basename):
@@ -154,48 +163,48 @@ def fix_names_in_tree(inpath, do_files=False):
                         os.rename(old_filename, new_filename)
                         print("Rename {} --> {}".format(fname, newname))
 
-# ...............................................
-def parse_relative_fname(relfname):
-    """Parse a relative filename into metadata about this file.
-
-    Args:
-        relfname (str): relative filename containing parent directory and filename
-
-    Returns:
-        arroyo_num (str): integer/number of the arroyo
-        arroyo_name (str): name of the arroyo
-        dam_name (str): name of the dam
-        dam_date (list): list of digit-strings, (yyyy, mm, dd)
-        picnum (int): integer/number of the photo
-    """
-    arroyo_num = arroyo_name = dam_name = dam_date = picnum = None
-    try:
-        dirname, fname = relfname.split(os.sep)
-    except ValueError:
-        print('Relfname {} does not parse into 2'.format(relfname))
-    else:
-        try:
-            arroyo_num, arroyo_name = dirname.split(SEPARATOR)
-        except ValueError:
-            print('Dirname {} does not parse into 2'.format(dirname))
-        else:
-            basename, ext = os.path.splitext(fname)
-            try:
-                dam_name, fulldate, picnum = basename.split(SEPARATOR)
-            except ValueError:
-                print('Basename {} does not parse into 3'.format(basename))
-            else:
-                tmp = fulldate.split("-")
-
-                try:
-                    dam_date = [int(d) for d in tmp]
-                except TypeError:
-                    print('Date {} does not parse into 3'.format(fulldate))
-                else:
-                    if len(dam_date) != 3:
-                        print('Date {} does not parse into 3'.format(dam_date))
-
-    return arroyo_num, arroyo_name, dam_name, dam_date, picnum
+# # ...............................................
+# def parse_relative_fname(relfname):
+#     """Parse a relative filename into metadata about this file.
+#
+#     Args:
+#         relfname (str): relative filename containing parent directory and filename
+#
+#     Returns:
+#         arroyo_num (str): integer/number of the arroyo
+#         arroyo_name (str): name of the arroyo
+#         dam_name (str): name of the dam
+#         dam_date (list): list of digit-strings, (yyyy, mm, dd)
+#         picnum (int): integer/number of the photo
+#     """
+#     arroyo_num = arroyo_name = dam_name = dam_date = picnum = None
+#     try:
+#         dirname, fname = relfname.split(os.sep)
+#     except ValueError:
+#         print('Relfname {} does not parse into 2'.format(relfname))
+#     else:
+#         try:
+#             arroyo_num, arroyo_name = dirname.split(SEPARATOR)
+#         except ValueError:
+#             print('Dirname {} does not parse into 2'.format(dirname))
+#         else:
+#             basename, ext = os.path.splitext(fname)
+#             try:
+#                 dam_name, fulldate, picnum = basename.split(SEPARATOR)
+#             except ValueError:
+#                 print('Basename {} does not parse into 3'.format(basename))
+#             else:
+#                 tmp = fulldate.split("-")
+#
+#                 try:
+#                     dam_date = [int(d) for d in tmp]
+#                 except TypeError:
+#                     print('Date {} does not parse into 3'.format(fulldate))
+#                 else:
+#                     if len(dam_date) != 3:
+#                         print('Date {} does not parse into 3'.format(dam_date))
+#
+#     return arroyo_num, arroyo_name, dam_name, dam_date, picnum
 
 # ...............................................
 def test_names_in_tree(inpath):
@@ -392,7 +401,8 @@ def reduce_image_size(infname, outfname, width, sample_method=Image.ANTIALIAS, o
         else:
             (orig_w, _) = img.size
             if orig_w <= width:
-                logit(log, f"Image {infname} width {orig_w} cannot be reduced")
+                logit(log, f"Image {infname} width {orig_w} cannot be reduced, saving to {outfname}")
+                img.save(outfname)
             else:
                 wpercent = (width / float(img.size[0]))
                 height = int(float(img.size[1]) * float(wpercent))

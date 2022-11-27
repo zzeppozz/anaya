@@ -41,13 +41,6 @@ if __name__ == "__main__":
     outpath = os.path.join(BASE_PATH, OUT_DIR)
     resize_path = os.path.join(outpath, THUMB_DIR)
 
-    # # Fix directories first
-    # fix_names_in_tree(inpath, do_files=False)
-    # # Fix filenames and test parsing before write
-    # fix_names_in_tree(inpath, do_files=True)
-    # # Test file and directories before further action
-    # test_names_in_tree(inpath)
-
     # Define output filenames
     base_fname = os.path.join(outpath, 'anaya_dams')
     csv_fname = '{}.csv'.format(base_fname)
@@ -60,12 +53,8 @@ if __name__ == "__main__":
     stamp(logger, 'Start')
 
     # Sets all_data dictionary on object
-    pm.read_metadata_from_directory()
+    pm.populate_images()
     stamp(logger, 'Read filenames')
-
-    # Updates all images in the dictionary from the referenced files
-    pm.read_data_from_image_files()
-    stamp(logger, 'Read image files')
 
     # # Rewrite thumbnails of all images
     pm.resize_images(outpath, resize_width=800, overwrite=True)

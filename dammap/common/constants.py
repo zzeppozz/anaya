@@ -39,7 +39,7 @@ class IMAGE_KEYS():
     ARROYO_NAME = "arroyo"
     ARROYO_NUM = "arroyo_num"
     DAM_NAME = "dam"
-    DAM_NUM = "dam_num"
+    PIC_NUM = "pic_num"
     DAM_DATE = "dam_date"
     # Data from image files
     IMG_DATE = "img_date"
@@ -55,6 +55,7 @@ class IMAGE_KEYS():
     Y_MIN = "y_min"
     Y_SEC = "y_sec"
     IN_BNDS = "in_bounds"
+    NO_GEO = "no_geo"
 
 SHP_FIELDS = [
     (IMAGE_KEYS.FILE_PATH, ogr.OFTString),
@@ -63,7 +64,7 @@ SHP_FIELDS = [
     (IMAGE_KEYS.ARROYO_NAME, ogr.OFTString),
     (IMAGE_KEYS.ARROYO_NUM, ogr.OFTInteger),
     (IMAGE_KEYS.DAM_NAME, ogr.OFTString),
-    (IMAGE_KEYS.DAM_NUM, ogr.OFTString),
+    (IMAGE_KEYS.PIC_NUM, ogr.OFTString),
     (IMAGE_KEYS.DAM_DATE, ogr.OFTString),
     (IMAGE_KEYS.IMG_DATE, ogr.OFTString),
     (IMAGE_KEYS.LON, ogr.OFTReal),
@@ -77,7 +78,8 @@ SHP_FIELDS = [
     (IMAGE_KEYS.Y_DEG, ogr.OFTInteger),
     (IMAGE_KEYS.Y_MIN, ogr.OFTInteger),
     (IMAGE_KEYS.Y_SEC, ogr.OFTReal),
-    (IMAGE_KEYS.IN_BNDS, ogr.OFTInteger)
+    (IMAGE_KEYS.IN_BNDS, ogr.OFTInteger),
+    (IMAGE_KEYS.NO_GEO, ogr.OFTInteger)
     ]
 
 

@@ -389,24 +389,3 @@ def get_csv_writer(datafile, delimiter, doAppend=True):
         raise Exception('Failed to read or open {}, ({})'
                         .format(datafile, str(e)))
     return writer, f
-
-
-# ...............................................
-def reduce_image_size(infname, outfname, width, sample_method=Image.ANTIALIAS, overwrite=True, log=None):
-    if ready_filename(outfname, overwrite=overwrite):
-        try:
-            img = Image.open(infname)
-        except Exception as e:
-            logit(log, " *** Unable to open file {}, {}".format(infname, e))
-        else:
-            (orig_w, _) = img.size
-            if orig_w <= width:
-                logit(log, f"Image {infname} width {orig_w} cannot be reduced, saving to {outfname}")
-                img.save(outfname)
-            else:
-                wpercent = (width / float(img.size[0]))
-                height = int(float(img.size[1]) * float(wpercent))
-                size = (width, height)
-                img = img.resize(size, sample_method)
-                img.save(outfname)
-                logit(log, 'Reduced image {} to {}'.format(infname, outfname))

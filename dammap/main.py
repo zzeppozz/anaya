@@ -57,14 +57,15 @@ if __name__ == "__main__":
     stamp(logger, 'Read filenames')
 
     # # Rewrite thumbnails of all images
-    pm.resize_images(outpath, resize_width=800, overwrite=True)
+    pm.resize_images(outpath, resize_width=800, overwrite=False)
     stamp(logger, 'Wrote thumbnails')
 
     # Write data to CSV, Shapefile, KML
     pm.write_outputs(csvfname=csv_fname, shpfname=shp_fname)
     stamp(logger, 'Wrote shapefile')
-    # # pm.write_outputs(kmlfname=kml_fname)
-    # # stamp('Wrote KML')
+
+    # Write out replicated coordinates
+    pm.print_duplicates()
     #
     # # Test that we have the expected number of records
     # pm.test_counts()
@@ -79,9 +80,6 @@ if __name__ == "__main__":
     # pm.test_counts()
     # stamp('Tested counts again')
     # stamp('Finished')
-    #
-    # # # Write smaller images and save to all_data dictionary
-    # # pm.resize_images(resize_width=500, resize_path=resize_path)
     #
     # print('Given: {}'.format(pm.bbox))
     # print('Computed: {}'.format(pm.extent))

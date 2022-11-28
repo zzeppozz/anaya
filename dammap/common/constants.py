@@ -29,6 +29,7 @@ class ALL_DATA_KEYS ():
     IMAGE_OUT_OF_RANGE = "img_out_of_range_meta"
     IMG_COUNT = "img_count"
     IMG_GEO_COUNT = "img_count_geo"
+    UNIQUE_COORDS = "unique_coordinates"
 
 # Metadata for image files
 class IMAGE_KEYS():

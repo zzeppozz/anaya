@@ -10,8 +10,8 @@ class DamMeta(object):
     # ............................................................................
     # Constructor
     # .............................................................................
-    def __init(
-            self, fullpath, relative_fname,
+    def __init__(
+            self, fullpath, basepath,
             thumbpath=None, arroyo_num=None, arroyo_name=None,
             dam_name=None, dam_date=None, picnum=None,
             img_date=None, longitude=None, latitude=None,
@@ -53,9 +53,13 @@ class DamMeta(object):
             in_bounds (int): 1 if within the extent of some externally provided bounding box
             logger (object): logger for recording messages to file or command line.
         """
+        self.set_logger(logger)
         self.fullpath = fullpath
-        self.relfname = relative_fname
-        self.basename = os.path.basename(relative_fname)
+        self._relative_path_idx = len(basepath)
+        if not basepath.endswith(os.sep):
+            self._relative_path_idx += 1
+        self.relfname = self.fullpath[self._relative_path_idx:]
+        self.basename = os.path.basename(self.relfname)
         self.x_deg = x_deg
         self.x_min = x_min
         self.x_sec = x_sec
@@ -74,6 +78,7 @@ class DamMeta(object):
         self.dam_name = dam_name
         self.dam_date = dam_date
         self.picnum = picnum
+        self.wkt = None
 
         # If any arroyo, dam values are missing, read from fullpath
         if None in (arroyo_num, arroyo_name, dam_name, dam_date, picnum):
@@ -94,27 +99,14 @@ class DamMeta(object):
                 self.longitude = xydd[0]
                 self.latitude = xydd[1]
             else:
-                self.log("Failed to return decimal degrees for {}".format(self.relfname))
-        self.wkt = "Point ({:.7f}  {:.7f})".format(self.longitude, self.latitude)
-
-        self.set_logger(logger)
-
-    # ...............................................
-    @property
-    def dd_ok(self):
-        if None in (
-                self.x_deg, self.x_min, self.x_sec, self.x_dir,
-                self.y_deg, self.y_min, self.y_sec, self.y_dir,
-                self.longitude, self.latitude):
-            return False
-        return True
+                self.log(f"Failed to return decimal degrees for {self.relfname}")
+        self.set_wkt()
 
     # ...............................................
     def set_logger(self, logger):
         self._logger = logger
-        
+
     # ...............................................
-    @classmethod
     def log(self, msg):
         if self._logger is not None:
             self._logger.log(msg)
@@ -122,8 +114,7 @@ class DamMeta(object):
             print(msg)
 
     # ...............................................
-    @classmethod
-    def parse_relative_fname(self, relfname):
+    def parse_relative_fname(self, relfname=None):
         """Parse a relative filename into metadata about this file.
 
         Args:
@@ -136,32 +127,34 @@ class DamMeta(object):
             dam_date (list): list of digit-strings, (yyyy, mm, dd)
             picnum (int): integer/number of the photo
         """
+        if relfname is None:
+            relfname = self.relfname
         arroyo_num = arroyo_name = dam_name = dam_date = picnum = None
         try:
             dirname, fname = relfname.split(os.sep)
         except ValueError:
-            print("Relfname {} does not parse into 2".format(relfname))
+            print(f"Relfname {relfname} does not parse into 2")
         else:
             try:
                 arroyo_num, arroyo_name = dirname.split(SEPARATOR)
             except ValueError:
-                print("Dirname {} does not parse into 2".format(dirname))
+                print(f"Dirname {dirname} does not parse into 2")
             else:
                 basename, ext = os.path.splitext(fname)
                 try:
                     dam_name, fulldate, picnum = basename.split(SEPARATOR)
                 except ValueError:
-                    print("Basename {} does not parse into 3".format(basename))
+                    print(f"Basename {basename} does not parse into 3")
                 else:
                     tmp = fulldate.split("-")
 
                     try:
                         dam_date = [int(d) for d in tmp]
                     except TypeError:
-                        print("Date {} does not parse into 3".format(fulldate))
+                        print(f"Date {fulldate} does not parse into 3")
                     else:
                         if len(dam_date) != 3:
-                            print("Date {} does not parse into 3".format(dam_date))
+                            print(f"Date {dam_date} does not parse into 3")
 
         return arroyo_num, arroyo_name, dam_name, dam_date, picnum
 
@@ -187,7 +180,9 @@ class DamMeta(object):
         return valstr
 
     # ...............................................
-    def get_image_metadata(self, fullname):
+    def get_image_metadata(self, fullname=None):
+        if fullname is None:
+            fullname = self.fullpath
         tags = date_tuple = dd = xdms = ydms = None
         # Read image metadata
         try:
@@ -196,8 +191,7 @@ class DamMeta(object):
             # Get Exif tags
             tags = exifread.process_file(f)
         except Exception as e:
-            self.log("{}: Unable to read image metadata, {}".format(
-                fullname, e))
+            self.log(f"{fullname}: Unable to read image metadata, {e}")
         finally:
             try:
                 f.close()
@@ -268,6 +262,21 @@ class DamMeta(object):
 
     # ...............................................
     @property
+    def dd_ok(self):
+        if None in (
+                self.x_deg, self.x_min, self.x_sec, self.x_dir,
+                self.y_deg, self.y_min, self.y_sec, self.y_dir,
+                self.longitude, self.latitude):
+            return False
+        return True
+
+    # ...............................................
+    def set_wkt(self):
+        if self.dd_ok:
+            self.wkt = "Point ({:.7f}  {:.7f})".format(self.longitude, self.latitude)
+
+    # ...............................................
+    @property
     def record(self):
         return {
             IMAGE_KEYS.FILE_PATH: self.fullpath,
@@ -312,4 +321,4 @@ class DamMeta(object):
                     size = (width, height)
                     img = img.resize(size, sample_method)
                     img.save(outfname)
-                    self.log("Reduced image {self.fullpath} to {outfname}")
+                    self.log(f"Reduced image {self.fullpath}, width {orig_w} to {outfname}, width {width}")

@@ -13,15 +13,15 @@ shp_flag = False
 # # ...............................................
 # def stamp(msg):
 #     t = time.localtime()
-#     print('## {} {}-{}-{} {}:{}:{}'.format(
+#     print("## {} {}-{}-{} {}:{}:{}".format(
 #         msg, t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec))
 #
 
 # ...............................................
 if __name__ == "__main__":
     is_dev = False
-    MAC_PATH = '/Users/aimeestewart/Library/Mobile Documents/com~apple~CloudDocs/Documents/Home/Anaya/anaya_map'
-    BASE_PATH = '/tank/anaya/'
+    MAC_PATH = "/Users/aimeestewart/Library/Mobile Documents/com~apple~CloudDocs/Documents/Home/Anaya/anaya_map"
+    BASE_PATH = "/tank/anaya/"
     maxY = 35.45045
     minY = 35.43479
     maxX = -106.05353
@@ -30,10 +30,10 @@ if __name__ == "__main__":
     bbox = (minX, minY, maxX, maxY)
 
     # parser = argparse.ArgumentParser(
-    #     description='Process image data, to create geospatial outputs.')
+    #     description="Process image data, to create geospatial outputs.")
     # parser.add_argument(
-    #     'basepath', type=str, default=BASE_PATH,
-    #     help='The base path for Dam Anaya input data and outputs.')
+    #     "basepath", type=str, default=BASE_PATH,
+    #     help="The base path for Dam Anaya input data and outputs.")
     # args = parser.parse_args()
     # inpath = args.inpath
 
@@ -42,47 +42,47 @@ if __name__ == "__main__":
     resize_path = os.path.join(outpath, THUMB_DIR)
 
     # Define output filenames
-    base_fname = os.path.join(outpath, 'anaya_dams')
-    csv_fname = '{}.csv'.format(base_fname)
-    shp_fname = '{}.shp'.format(base_fname)
-    kml_fname = '{}.kml'.format(base_fname)
+    base_fname = os.path.join(outpath, "anaya_dams")
+    csv_fname = "{}.csv".format(base_fname)
+    shp_fname = "{}.shp".format(base_fname)
+    kml_fname = "{}.kml".format(base_fname)
     logger = get_logger(outpath, logname="dam_map")
 
     pm = PicMapper(inpath, buffer_distance=dam_buffer, bbox=bbox, logger=logger)
 
-    stamp(logger, 'Start')
+    stamp(logger, "Start")
 
     # Sets all_data dictionary on object
     pm.populate_images()
-    stamp(logger, 'Read filenames')
+    stamp(logger, "Read filenames")
 
     # # Rewrite thumbnails of all images
-    pm.resize_images(outpath, resize_width=800, overwrite=False)
-    stamp(logger, 'Wrote thumbnails')
+    total = pm.resize_images(outpath, resize_width=800, overwrite=False)
+    stamp(logger, f"Wrote {total} thumbnails")
 
     # Write data to CSV, Shapefile, KML
     pm.write_outputs(csvfname=csv_fname, shpfname=shp_fname)
-    stamp(logger, 'Wrote shapefile')
+    stamp(logger, "Wrote shapefile")
 
     # Write out replicated coordinates
     pm.print_duplicates()
     #
     # # Test that we have the expected number of records
     # pm.test_counts()
-    # stamp('Tested counts')
+    # stamp("Tested counts")
     #
     # orig_all_data = pm.all_data
     # pm.read_csv_data(csv_fname)
-    # stamp('Read CSV data')
+    # stamp("Read CSV data")
     # # pm.compare_all_data(orig_all_data)
     #
     # # Test that we have the expected number of records
     # pm.test_counts()
-    # stamp('Tested counts again')
-    # stamp('Finished')
+    # stamp("Tested counts again")
+    # stamp("Finished")
     #
-    # print('Given: {}'.format(pm.bbox))
-    # print('Computed: {}'.format(pm.extent))
+    # print("Given: {}".format(pm.bbox))
+    # print("Computed: {}".format(pm.extent))
 
 """
 
@@ -111,9 +111,9 @@ if __name__ == "__main__":
 #PLACEMARKS#
   <Placemark>
     <ExtendedData><SchemaData schemaUrl="#anaya_springs">
-        <SimpleData name="arroyo">1 RR-Bill's toptobottom</SimpleData>
-        <SimpleData name="fullpath">/Users/astewart/Home/AnneBill/AnayaSprings/1 RR-Bill's toptobottom/201411_anaya20141103_0020.JPG</SimpleData>
-        <SimpleData name="relpath">AnayaSprings/1 RR-Bill's toptobottom/201411_anaya20141103_0020.JPG</SimpleData>
+        <SimpleData name="arroyo">1 RR-Bill"s toptobottom</SimpleData>
+        <SimpleData name="fullpath">/Users/astewart/Home/AnneBill/AnayaSprings/1 RR-Bill"s toptobottom/201411_anaya20141103_0020.JPG</SimpleData>
+        <SimpleData name="relpath">AnayaSprings/1 RR-Bill"s toptobottom/201411_anaya20141103_0020.JPG</SimpleData>
         <SimpleData name="basename">201411_anaya20141103_0020.JPG</SimpleData>
         <SimpleData name="geomwkt">Point (-106.0620556  35.4359889)</SimpleData>
         <SimpleData name="longitude">-106.062055555555560</SimpleData>

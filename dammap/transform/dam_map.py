@@ -13,7 +13,7 @@ from dammap.common.dammeta import DamMeta
 from dammap.common.constants import ALL_DATA_KEYS as ADK
 from dammap.common.constants import IMAGE_KEYS as IK
 
-# DELETE_CHARS = ['\'', ',', '"', ' ', '(', ')', '_']
+# DELETE_CHARS = ["\"", ",", """, " ", "(", ")", "_"]
 
 
 # .............................................................................
@@ -57,55 +57,55 @@ class PicMapper(object):
     #     if os.path.exists(fname):
     #         os.remove(fname)
     #     foldername, _ = os.path.splitext(os.path.basename(fname))
-    #     rel_satellite_fname = os.path.join('../..', ANC_DIR, SAT_FNAME)
-    #     f = open(fname, 'w')
-    #     f.write('<?xml version="1.0" encoding="utf-8" ?>\n')
-    #     f.write('<kml xmlns="http://www.opengis.net/kml/2.2">\n')
-    #     f.write('<Document id="root_doc">\n')
-    #     f.write('<Folder><name>{}</name>\n'.format(foldername))
-    #     f.write('   <GroundOverlay>\n')
-    #     f.write('      <name>Satellite overlay on terrain</name>\n')
-    #     f.write('      <description>Local imagery</description>\n')
-    #     f.write('      <Icon><href>{}</href></Icon>\n'.format(rel_satellite_fname))
-    #     f.write('      <LatLonBox>\n')
-    #     f.write('         <north>{}</north>\n'.format(max_y))
-    #     f.write('         <south>{}</south>\n'.format(min_y))
-    #     f.write('         <east>{}</east>\n'.format(max_x))
-    #     f.write('         <west>{}</west>\n'.format(min_x))
-    #     f.write('         <rotation>-0.1556640799496235</rotation>\n')
-    #     f.write('      </LatLonBox>\n')
-    #     f.write('   </GroundOverlay>\n')
+    #     rel_satellite_fname = os.path.join("../..", ANC_DIR, SAT_FNAME)
+    #     f = open(fname, "w")
+    #     f.write("<?xml version="1.0" encoding="utf-8" ?>\n")
+    #     f.write("<kml xmlns="http://www.opengis.net/kml/2.2">\n")
+    #     f.write("<Document id="root_doc">\n")
+    #     f.write("<Folder><name>{}</name>\n".format(foldername))
+    #     f.write("   <GroundOverlay>\n")
+    #     f.write("      <name>Satellite overlay on terrain</name>\n")
+    #     f.write("      <description>Local imagery</description>\n")
+    #     f.write("      <Icon><href>{}</href></Icon>\n".format(rel_satellite_fname))
+    #     f.write("      <LatLonBox>\n")
+    #     f.write("         <north>{}</north>\n".format(max_y))
+    #     f.write("         <south>{}</south>\n".format(min_y))
+    #     f.write("         <east>{}</east>\n".format(max_x))
+    #     f.write("         <west>{}</west>\n".format(min_x))
+    #     f.write("         <rotation>-0.1556640799496235</rotation>\n")
+    #     f.write("      </LatLonBox>\n")
+    #     f.write("   </GroundOverlay>\n")
     #     return f
     # 
     # # ...............................................
     # def _close_kml_file(self, kmlf):
-    #     kmlf.write('</Folder>\n')
-    #     kmlf.write('</Document></kml>\n')
+    #     kmlf.write("</Folder>\n")
+    #     kmlf.write("</Document></kml>\n")
     #     kmlf.close()
 
     # ...............................................
     def _create_layer(self, fields, shpFname):
         ogr.RegisterAll()
-        drv = ogr.GetDriverByName('ESRI Shapefile')
+        drv = ogr.GetDriverByName("ESRI Shapefile")
         tSRS = osr.SpatialReference()
         tSRS.ImportFromEPSG(4326)
         try:
             # Create the file object
             ds = drv.CreateDataSource(shpFname)
             if ds is None:
-                raise Exception('Dataset creation failed for %s' % shpFname)
+                raise Exception("Dataset creation failed for %s" % shpFname)
             # Create a layer
-            lyr = ds.CreateLayer('anayaSprings', geom_type=ogr.wkbPoint, srs=tSRS)
+            lyr = ds.CreateLayer("anayaSprings", geom_type=ogr.wkbPoint, srs=tSRS)
             if lyr is None:
-                raise Exception('Layer creation failed for %s.' % shpFname)
+                raise Exception("Layer creation failed for %s." % shpFname)
         except Exception as e:
-            raise Exception('Failed creating dataset or layer for %s (%s)'
+            raise Exception("Failed creating dataset or layer for %s (%s)"
                                   % (shpFname, str(e)))
         # Create attributes
         for (fldname, fldtype) in fields:
             fldDefn = ogr.FieldDefn(fldname, fldtype)
             if lyr.CreateField(fldDefn) != 0:
-                raise Exception('CreateField failed for %s' % (fldname))
+                raise Exception("CreateField failed for %s" % (fldname))
         return ds, lyr
 
     # # ...............................................
@@ -115,25 +115,25 @@ class PicMapper(object):
     #     xdd = float(damrec[IK.LON])
     #     ydd = float(damrec[IK.LAT])
     #     if xdd < self.bbox[0]:
-    #         self._logger.warn('X value {} < min {}'.format(xdd, self.bbox[0]))
+    #         self._logger.warn("X value {} < min {}".format(xdd, self.bbox[0]))
     #     elif xdd > self.bbox[2]:
-    #         self._logger.warn('X value {} > max {}'.format(xdd, self.bbox[2]))
+    #         self._logger.warn("X value {} > max {}".format(xdd, self.bbox[2]))
     #     elif ydd < self.bbox[1]:
-    #         self._logger.warn('Y value {} < min {}'.format(ydd, self.bbox[1]))
+    #         self._logger.warn("Y value {} < min {}".format(ydd, self.bbox[1]))
     #     elif ydd > self.bbox[3]:
-    #         self._logger.warn('Y value {} > max {}'.format(ydd, self.bbox[3]))
+    #         self._logger.warn("Y value {} > max {}".format(ydd, self.bbox[3]))
     #     else:
     #         good_geo = True
     #     return good_geo
 
     # ...............................................
     def _format_date(self, date_seq):
-        yr = mo = day = '0'
+        yr = mo = day = "0"
         try:
             [yr, mo, day] = date_seq
         except:
             self._logger.warn(f"damrec does not have a valid date: {date_seq}")
-        return '{}-{}-{}'.format(yr, mo, day)
+        return "{}-{}-{}".format(yr, mo, day)
 
     # ...............................................
     def _create_feat_shp(self, lyr, damrec):
@@ -150,7 +150,7 @@ class PicMapper(object):
                 geom = ogr.CreateGeometryFromWkt(wkt)
                 feat.SetGeometryDirectly(geom)
             except Exception as e:
-                self._logger.warn('Failed to fillOGRFeature, e = {}'.format(e))
+                self._logger.warn(f"Failed to fillOGRFeature, e = {e}")
             else:
                 # Create new feature, setting FID, in this layer
                 lyr.CreateFeature(feat)
@@ -172,17 +172,14 @@ class PicMapper(object):
             arroyo = damrec[IK.ARROYO_NAME]
             _, basefname = os.path.split(rel_thumbfname)
             basename, _ = os.path.splitext(basefname)
-            dt = '{}-{}-{}'.format(yr, mo, day)
+            dt = f"{yr}-{mo}-{day}"
 
-            kmlf.write('  <Placemark>\n')
-            kmlf.write('    <name>{}</name>\n'.format(basefname))
-            kmlf.write('    <description>{} in {} on {}</description>\n'
-                       .format(basename, arroyo, dt))
-            kmlf.write('    <img style="max-width:{}px;" dammap="{}" />\n'
-                       .format(RESIZE_WIDTH, rel_thumbfname))
-            kmlf.write('    <Point><coordinates>{},{}</coordinates></Point>\n'
-                       .format(xdd, ydd))
-            kmlf.write('  </Placemark>\n')
+            kmlf.write("  <Placemark>\n")
+            kmlf.write(f"    <name>{basefname}</name>\n")
+            kmlf.write(f"    <description>{basename} in {arroyo} on {dt}</description>\n")
+            kmlf.write(f"    <img style='max-width:{RESIZE_WIDTH}px;' dammap='{rel_thumbfname}' />\n")
+            kmlf.write(f"    <Point><coordinates>{xdd},{ydd}</coordinates></Point>\n")
+            kmlf.write("  </Placemark>\n")
 
     # ...............................................
     def _create_lookat_kml(self, kmlf, rel_thumbfname, damrec):
@@ -229,29 +226,26 @@ class PicMapper(object):
                 ydd = damrec[IK.LAT]
                 arroyo = damrec[IK.ARROYO_NAME]
             except Exception as e:
-                self._logger.error('Failed reading data {}'.format(e))
+                self._logger.error(f"Failed reading data {e}")
             else:
                 _, basefname = os.path.split(rel_thumbfname)
                 basename, _ = os.path.splitext(basefname)
-                dt = '{}-{}-{}'.format(yr, mo, day)
-                kmlf.write('  <Placemark>\n')
-                kmlf.write('    <name>{}</name>\n'.format(basefname))
-                kmlf.write('    <description>{} in {} on {}</description>\n'
-                           .format(basename, arroyo, dt))
-                kmlf.write('    <img style="max-width:{}px;" dammap="{}"/>\n'
-                           .format(RESIZE_WIDTH, rel_thumbfname))
-                kmlf.write('    <LookAt>')
-                kmlf.write('       <longitude>{}</longitude>'.format(xdd))
-                kmlf.write('       <latitude>{}</latitude>'.format(ydd))
-                kmlf.write('       <altitude>2</altitude>')
-                kmlf.write('       <range>4</range>')
-                kmlf.write('       <tilt>45</tilt>')
-                kmlf.write('       <heading>0</heading>')
-                kmlf.write('       <altitudeMode>relativeToGround</altitudeMode>')
-                kmlf.write('    </LookAt>')
-                kmlf.write('    <Point><coordinates>{},{}</coordinates></Point>\n'
-                           .format(xdd, ydd))
-                kmlf.write('  </Placemark>\n')
+                dt = f"{yr}-{mo}-{day}"
+                kmlf.write("  <Placemark>\n")
+                kmlf.write(f"    <name>{basefname}</name>\n")
+                kmlf.write(f"    <description>{basename} in {arroyo} on {dt}</description>\n")
+                kmlf.write(f"    <img style='max-width:{RESIZE_WIDTH}px;' dammap='{rel_thumbfname}'/>\n")
+                kmlf.write("    <LookAt>")
+                kmlf.write(f"       <longitude>{xdd}</longitude>")
+                kmlf.write(f"       <latitude>{ydd}</latitude>")
+                kmlf.write("       <altitude>2</altitude>")
+                kmlf.write("       <range>4</range>")
+                kmlf.write("       <tilt>45</tilt>")
+                kmlf.write("       <heading>0</heading>")
+                kmlf.write("       <altitudeMode>relativeToGround</altitudeMode>")
+                kmlf.write("    </LookAt>")
+                kmlf.write(f"    <Point><coordinates>{xdd},{ydd}</coordinates></Point>\n")
+                kmlf.write("  </Placemark>\n")
 
     # ...............................................
     def _add_coords(self, all_coords, currfname, damrec):
@@ -262,7 +256,7 @@ class PicMapper(object):
             dy = abs(abs(y) - abs(curry))
             if dx < self.buffer_distance or dy < self.buffer_distance:
                 self._logger.info(
-                    'Current file {} is within buffer of {} (dx = {}, dy = {})'.format(
+                    "Current file {} is within buffer of {} (dx = {}, dy = {})".format(
                         currfname, fname, dx, dy))
                 break
         all_coords[currfname] = (currx, curry)
@@ -280,7 +274,7 @@ class PicMapper(object):
     #             fullfname, thumbfname, RESIZE_WIDTH, Image.ANTIALIAS,
     #             overwrite=overwrite, log=self._logger)
     #         # Why?
-    #         has_geo = damrec[IK.WKT].startswith('Point')
+    #         has_geo = damrec[IK.WKT].startswith("Point")
     #         if has_geo:
     #             all_coords = self._add_coords(all_coords, relfname, damrec)
     #     return all_coords
@@ -331,7 +325,7 @@ class PicMapper(object):
             csvf.close()
         if dataset:
             dataset.Destroy()
-            self._logger.info('Closed/wrote dataset {}'.format(shpfname))
+            self._logger.info("Closed/wrote dataset {}".format(shpfname))
 
     # ...............................................
     def eval_extent(self, x: float, y: float) -> int:
@@ -386,7 +380,7 @@ class PicMapper(object):
 
     # ...............................................
     def _parse_datestring(self, dtstr):
-        parts = dtstr.lstrip('([').rstrip('])').split(',')
+        parts = dtstr.lstrip("([").rstrip("])").split(",")
         try:
             date_vals = [int(p.strip()) for p in parts]
         except:
@@ -432,7 +426,7 @@ class PicMapper(object):
                 arroyo_name = rec[IK.ARROYO_NAME]
 
                 # Count images with good geo data
-                if rec[IK.WKT].startswith('Point') and rec[IK.IN_BNDS] == 1:
+                if rec[IK.WKT].startswith("Point") and rec[IK.IN_BNDS] == 1:
                     # Save metadata for each image
                     self.all_data[ADK.IMAGE_META][relfname] = rec
                     self.all_data[ADK.IMG_GEO_COUNT] += 1
@@ -446,7 +440,7 @@ class PicMapper(object):
                     self.all_data[ADK.ARROYO_META][arroyo_name] = [relfname]
         except Exception as e:
             self._logger.error(
-                'Failed to read image metadata from {}, line {}, {}'.format(
+                "Failed to read image metadata from {}, line {}, {}".format(
                     csv_fname, reader.line_num, e))
         finally:
             f.close()
@@ -462,9 +456,25 @@ class PicMapper(object):
             bbox (list): list of minX, minY, maxX, maxY
         """
         self._logger.info(
-            'Given: {} {} {} {}'.format(
+            "Given: {} {} {} {}".format(
                 self.bbox[0], self.bbox[1], self.bbox[2], self.bbox[3]))
         self._logger.info(f"Computed: {self.extent}")
+
+    # ...............................................
+    def _add_to_unique_coords(self, dimg):
+        if dimg.dd_ok:
+            if dimg.wkt in self.all_data[ADK.UNIQUE_COORDS].keys():
+                if dimg.arroyo_name in self.all_data[ADK.UNIQUE_COORDS][dimg.wkt].keys():
+                    self.all_data[ADK.UNIQUE_COORDS][dimg.wkt][dimg.arroyo_name].append(dimg.relfname)
+                else:
+                    self.all_data[ADK.UNIQUE_COORDS][dimg.wkt][dimg.arroyo_name] = [dimg.relfname]
+            else:
+                self.all_data[ADK.UNIQUE_COORDS][dimg.wkt] = {dimg.arroyo_name:  [dimg.relfname]}
+        else:
+            if dimg.arroyo_name in self.all_data[ADK.UNIQUE_COORDS]["no_geo"].keys():
+                self.all_data[ADK.UNIQUE_COORDS]["no_geo"][dimg.arroyo_name].append(dimg.relfname)
+            else:
+                self.all_data[ADK.UNIQUE_COORDS]["no_geo"][dimg.arroyo_name] = [dimg.relfname]
 
     # ...............................................
     def populate_images(self):
@@ -472,12 +482,17 @@ class PicMapper(object):
 
         Results in:
             all_data dictionary with keys/values:
-                'base_path': base path containing input and output directories
-                'arroyo_meta': {arroyo_name: [rel_fname, ...], ...}
-                'image_meta': {rel_fname: {image_metadata}, ...}
-                'out_of_range': {rel_fname: {image_metadata}, ...}
-                'img_count': total number of images
-                'img_count_geo': number of georeferenced and in-bounds images
+                `base_path`: base path containing input and output directories
+                `arroyo_meta`: {arroyo_name: [rel_fname, ...], ...}
+                `image_meta`: {rel_fname: {image_metadata}, ...}
+                `out_of_range`: {rel_fname: {image_metadata}, ...}
+                `img_count`: total number of images
+                `img_count_geo`: number of georeferenced and in-bounds images
+                `unique_coordinates`: {wkt: {arroyo: [relfname, ...]},
+                                             arroyo2: [],
+                                             ...},
+                                       wkt2: {...},
+                                       ...}
         """
         self.all_data = {
             ADK.BASE_PATH: self.base_path,
@@ -487,7 +502,7 @@ class PicMapper(object):
             ADK.IMAGE_OUT_OF_RANGE: {},
             ADK.IMG_COUNT: 0,
             ADK.IMG_GEO_COUNT: 0,
-            ADK.UNIQUE_COORDS: {"no_geo": []}
+            ADK.UNIQUE_COORDS: {"no_geo": {}}
         }
         for root, _, files in os.walk(self.image_path):
             for fname in files:
@@ -498,19 +513,14 @@ class PicMapper(object):
 
                     # Get metadata from directory and filename
                     dimg = DamMeta(fullfname, self.image_path)
+                    # Add image metadata object to image_meta list
                     self.all_data[ADK.IMAGE_META][dimg.relfname] = dimg
+                    # Add relfname to unique_coordinate dictionary by arroyo
+                    self._add_to_unique_coords(dimg)
+                    # Evaluate point within expected boundary
                     if dimg.dd_ok:
                         self.all_data[ADK.IMG_GEO_COUNT] += 1
                         dimg.in_bounds = self.eval_extent(dimg.longitude, dimg.latitude)
-                        try:
-                            self.all_data[ADK.UNIQUE_COORDS][dimg.wkt].append(dimg.relfname)
-                        except:
-                            self.all_data[ADK.UNIQUE_COORDS][dimg.wkt] = [dimg.relfname]
-                    else:
-                        self.all_data[ADK.UNIQUE_COORDS]["no_geo"].append(dimg.relfname)
-
-                    # Add image metadata object to image_meta list
-                    # self.all_data[ADK.IMAGE_META][dimg.relfname] = dimg
 
                     # Add image filename to arroyo_meta dict
                     try:
@@ -520,27 +530,94 @@ class PicMapper(object):
 
         self.all_data[ADK.ARROYO_COUNT] = len(self.all_data[ADK.ARROYO_META])
 
+
+    # ...............................................
+    def _summarize_duplicates(self):
+        """
+        unique_coord_counts = {wkt:
+                                    arroyo_count: arroyo_count,
+                                    image_count: image_count
+                                    arroyo1_name: x,
+                                    arroyo2_name: y},
+                               wkt2: ...}
+        wkt_by_count = { 45: [wkt]
+                        11: [wkt, wkt, ...]
+                        4:  [...]
+                        ...}
+        """
+        if not self.all_data:
+            self.populate_images()
+        # Counts
+        unique_coord_counts = {}
+        for wkt, arroyo_dict in self.all_data[ADK.UNIQUE_COORDS].items():
+            unique_coord_counts[wkt] = {"arroyo_count": len(arroyo_dict)}
+            image_count = 0
+            for arroyo, relfnames in arroyo_dict.items():
+                unique_coord_counts[wkt][arroyo] = len(relfnames)
+                image_count += len(relfnames)
+            unique_coord_counts[wkt]["image_count"] = image_count
+
+        wkt_by_count = {}
+        for wkt, summary in unique_coord_counts.items():
+            try:
+                wkt_by_count[summary["image_count"]].append(wkt)
+            except KeyError:
+                wkt_by_count[summary["image_count"]] = [wkt]
+
+        return unique_coord_counts, wkt_by_count
+
     # ...............................................
     def print_duplicates(self):
         if not self.all_data:
             self.populate_images()
-        for wkt, relfnames in self.all_data[ADK.UNIQUE_COORDS].items():
-            if wkt != "no_geo" and len(relfnames) > 1:
-                dimgs = [self.all_data[ADK.IMAGE_META][rfn] for rfn in relfnames]
-                first_arroyo = dimgs[0].arroyo_name
-                first_date = dimgs[0].img_date
-                self._logger.info(
-                    f"Coordinates replicated {len(relfnames)} times: {wkt}, " +
-                    f"first image {first_arroyo} on {self._format_date(first_date)}")
-                for dimg in dimgs[1:]:
-                    self._logger.info(f"   {dimg.relfname}")
-                    if dimg.arroyo_name != first_arroyo:
-                        self._logger.info(f"      Arroyo differs {dimg.relfname}")
-                    if dimg.img_date != first_date:
-                        self._logger.info(
-                            f"      Date differs " +
-                            f"{self._format_date(dimg.img_date)}")
+        # Counts
+        unique_coord_counts, wkt_by_count = self._summarize_duplicates()
 
+        # Print bad coordinate info
+        bad_coord_dict = self.all_data[ADK.UNIQUE_COORDS]["no_geo"]
+        self._logger.info(f"Missing or bad coordinates:  {len(bad_coord_dict)} arroyos")
+        for arr, relfnames in bad_coord_dict.items():
+            self._logger.info(f"   Arroyo {arr}:")
+            for fn in relfnames:
+                self._logger.info(f"      {fn}")
+        # Print duplicates, starting with highest number of images per wkt
+        ordered_counts = list(wkt_by_count.keys())
+        ordered_counts.sort(reverse=True)
+        for image_count in ordered_counts:
+            if image_count > 1:
+                wkts = wkt_by_count[image_count]
+                for wkt in wkts:
+                    if wkt != "no_geo":
+                        self._logger.info(f"** {image_count} images with the same coordinates {wkt}")
+                        for key, val in unique_coord_counts[wkt].items():
+                            # key is arroyo_name
+                            if not key.endswith("_count"):
+                                self._logger.info(f"   arroyo: {key} has {val} images for wkt")
+                                for relfname in self.all_data[ADK.UNIQUE_COORDS][wkt][key]:
+                                    self._logger.info(f"      image: {relfname}")
+        #
+        # for wkt, arroyo_dict in self.all_data[ADK.UNIQUE_COORDS].items():
+        #     rfns = [rfn for rfn in relfnames in arroyo_dict.values()]
+        #     for arroyo, relfnames in arroyo_dict:
+        #         if wkt != "no_geo" and len(relfnames) > 1:
+        #             dimgs = [self.all_data[ADK.IMAGE_META][rfn] for rfn in relfnames]
+        #             self._logger.info(f"   Arroyo {arr}:")
+        #             first_arroyo = dimgs[0].arroyo_name
+        #             first_date = dimgs[0].img_date
+        #             self._logger.info(f"Coordinates replicated {len(relfnames)} times: {wkt} ")
+        #             self._logger.info(
+        #                 f"   Comparing first pic {dimgs[0].relfname}: arroyo {first_arroyo} " +
+        #                 f"on {self._format_date(first_date)}")
+        #             for dimg in dimgs[1:]:
+        #                 if dimg.arroyo_name == first_arroyo:
+        #                     if dimg.img_date == first_date:
+        #                         self._logger.info(f"   {dimg.relfname}: Same arroyo and date")
+        #                     else:
+        #                         self._logger.info(f"   {dimg.relfname}: Date differs")
+        #                 elif dimg.img_date == first_date:
+        #                     self._logger.info(f"   {dimg.relfname}: Arroyo differs")
+        #                 else:
+        #                     self._logger.info(f"   {dimg.relfname}: Arroyo and date differ")
 
     # # ...............................................
     # def test_counts(self):
@@ -602,6 +679,7 @@ class PicMapper(object):
             resize_width (int): width in pixels for resized images
             overwrite (bool): flag indicating whether to rewrite existing resized images.
         """
+        count = 0
         if not self.all_data:
             self.populate_images()
         for relfname, dimg in self.all_data[ADK.IMAGE_META].items():
@@ -610,14 +688,17 @@ class PicMapper(object):
                 dimg.thumbpath = os.path.join(outpath, THUMB_DIR, dimg.relfname)
 
                 # Rewrite the image
-                dimg.resize(
+                resized = dimg.resize(
                     dimg.thumbpath, resize_width, sample_method=Image.ANTIALIAS,
                     overwrite=overwrite)
+                if resized is True:
+                    count += 1
+        return count
 
 # .............................................................................
 # .............................................................................
 # ...............................................
-if __name__ == '__main__':
+if __name__ == "__main__":
 #     max_y = 35.45045
 #     min_y = 35.43479
 #     max_x = -106.05353

@@ -79,6 +79,7 @@ class DamMeta(object):
         self.dam_date = dam_date
         self.picnum = picnum
         self.wkt = None
+        self.guilty_party = "unknown"
 
         # If any arroyo, dam values are missing, read from fullpath
         if None in (arroyo_num, arroyo_name, dam_name, dam_date, picnum):
@@ -92,14 +93,13 @@ class DamMeta(object):
         if None in (
                 x_deg, x_min, x_sec, x_dir, y_deg, y_min, y_sec, y_dir,
                 longitude, latitude):
-            (self.img_date, xydd, xdms, ydms) = self.get_image_metadata()
+            (self.img_date, xydd, xdms, ydms, self.guilty_party
+             ) = self.get_image_metadata()
             if None not in (xydd, xdms, ydms):
                 (self.x_deg, self.x_min, self.x_sec, self.x_dir) = xdms
                 (self.y_deg, self.y_min, self.y_sec, self.y_dir) = ydms
                 self.longitude = xydd[0]
                 self.latitude = xydd[1]
-            else:
-                self.log(f"Failed to return decimal degrees for {self.relfname}")
         self.set_wkt()
 
     # ...............................................
@@ -107,9 +107,9 @@ class DamMeta(object):
         self._logger = logger
 
     # ...............................................
-    def log(self, msg):
+    def log(self, msg=""):
         if self._logger is not None:
-            self._logger.log(msg)
+            self._logger.info(msg)
         else:
             print(msg)
 
@@ -185,25 +185,34 @@ class DamMeta(object):
             fullname = self.fullpath
         tags = date_tuple = dd = xdms = ydms = None
         # Read image metadata
+        self.log(f"Reading {fullname}")
         try:
             # Open file in binary mode
             f = open(fullname, "rb")
             # Get Exif tags
             tags = exifread.process_file(f)
         except Exception as e:
-            self.log(f"{fullname}: Unable to read image metadata, {e}")
+            self.log(f"   ** Unable to read image metadata, {e}")
         finally:
             try:
                 f.close()
             except:
                 pass
         # Parse image metadata
+        guilty_party = "unknown"
         if tags:
+            try:
+                guilty_party = f"{tags['Image Make']}: {tags['Image Model']}"
+            except:
+                pass
             dd, xdms, ydms = self._get_dd(tags)
             date_tuple = self._get_date(tags)
+            if None in (dd, xdms, ydms):
+                self.log(
+                    f"   ** Failed to return decimal degrees from {guilty_party}")
         else:
-            self.log(f"{fullname}: exifread found no tags")
-        return date_tuple, dd, xdms, ydms
+            self.log(f"   ** exifread found no tags")
+        return date_tuple, dd, xdms, ydms, guilty_party
 
     # ...............................................
     def _get_date(self, tags):
@@ -225,16 +234,14 @@ class DamMeta(object):
         try:
             degObj, minObj, secObj = tags[locKey].values
         except KeyError:
-            gpskeys = [k for k in tags.keys() if k.startswith("GPS")]
-            self.log(f"Missing {locKey} in {gpskeys}")
-            # raise
+            pass
         else:
             nsew = tags[dirKey].printable
             if nsew == negativeIndicator:
                 isNegative = True
             # Convert to float
-            degrees = degObj.num
-            minutes = minObj.num
+            degrees = float(degObj.real)
+            minutes = float(minObj.real)
             seconds = float(secObj.real)
             # Convert to decimal degrees
             dd = (seconds/3600) + (minutes/60) + degrees
@@ -245,18 +252,18 @@ class DamMeta(object):
     # ...............................................
     def _get_dd(self, tags):
         dd = xdms = ydms = None
-        xdd, xdeg, xmin, xsec, xdir = self._get_location_vals(
-            tags, IMG_META.X_KEY, IMG_META.X_DIR_KEY, "W")
-        ydd, ydeg, ymin, ysec, ydir = self._get_location_vals(
-            tags, IMG_META.Y_KEY, IMG_META.Y_DIR_KEY, "S")
-
-        if None in (xdd, xdeg, xmin, xsec, xdir, ydd, ydeg, ymin, ysec, ydir):
-            self.log(f"Coordinates cannot be parsed")
-        else:
+        # Are the GPS tags present?
+        if IMG_META.X_KEY in tags.keys() and IMG_META.Y_KEY in tags.keys():
+            xdd, xdeg, xmin, xsec, xdir = self._get_location_vals(
+                tags, IMG_META.X_KEY, IMG_META.X_DIR_KEY, "W")
+            ydd, ydeg, ymin, ysec, ydir = self._get_location_vals(
+                tags, IMG_META.Y_KEY, IMG_META.Y_DIR_KEY, "S")
             # Convert to desired format
             dd = (xdd, ydd)
             xdms = (xdeg, xmin, xsec, xdir)
             ydms = (ydeg, ymin, ysec, ydir)
+        else:
+            self.log(f"Missing {IMG_META.X_KEY} or {IMG_META.Y_KEY} in tags for camera {self.guilty_party}")
 
         return dd, xdms, ydms
 
@@ -305,6 +312,7 @@ class DamMeta(object):
 
     # ...............................................
     def resize(self, outfname, width, sample_method=Image.ANTIALIAS, overwrite=True, log=None):
+        resized = False
         if ready_filename(outfname, overwrite=overwrite):
             try:
                 img = Image.open(self.fullpath)
@@ -322,3 +330,5 @@ class DamMeta(object):
                     img = img.resize(size, sample_method)
                     img.save(outfname)
                     self.log(f"Reduced image {self.fullpath}, width {orig_w} to {outfname}, width {width}")
+                    resized = True
+        return resized

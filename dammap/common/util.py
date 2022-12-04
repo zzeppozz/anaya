@@ -33,8 +33,9 @@ def get_logger(outpath, logname=None):
     timestamp = "{}".format(time.strftime("%Y%m%d-%H%M", time.localtime(secs)))
     if logname is None:
         logname, _ = os.path.splitext(os.path.basename(__file__))
-    logname = '{}.{}'.format(logname, timestamp)
+    # logname = '{}.{}'.format(logname, timestamp)
     logfname = os.path.join(outpath, logname + '.log')
+    ready_filename(logfname, overwrite=True)
     # get logger
     log = logging.getLogger(logname)
     log.setLevel(level)

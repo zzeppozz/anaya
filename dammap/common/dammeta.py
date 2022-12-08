@@ -21,7 +21,7 @@ class DamMeta(object):
             x_dir=None, x_deg=None, x_min=None, x_sec=None,
             y_dir=None, y_deg=None, y_min=None, y_sec=None,
             in_bounds=None, no_geo=None, logger=None):
-        """Create a dam object from an image file
+        """Create a dam object from an image file.
 
         Args:
             fullpath(str): Full filename and path
@@ -201,63 +201,26 @@ class DamMeta(object):
 
         return valstr
 
-    # # ...............................................
-    # def get_image_metadata(self, fullname=None):
-    #     if fullname is None:
-    #         fullname = self.fullpath
-    #     tags = date_tuple = dd = xdms = ydms = None
-    #     # Read image metadata
-    #     self.log(f"Reading {fullname}")
-    #     try:
-    #         # Open file in binary mode
-    #         f = open(fullname, "rb")
-    #         # Get Exif tags
-    #         tags = exifread.process_file(f)
-    #     except Exception as e:
-    #         self.log(f"   ** Unable to read image metadata, {e}")
-    #     finally:
-    #         try:
-    #             f.close()
-    #         except:
-    #             pass
-    #     # Parse image metadata
-    #     guilty_party = "unknown"
-    #     if tags:
-    #         try:
-    #             guilty_party = f"{tags['Image Make']}: {tags['Image Model']}"
-    #         except:
-    #             pass
-    #         dd, xdms, ydms = self._get_dd(tags)
-    #         date_tuple = self._get_date(tags)
-    #         if None in (dd, xdms, ydms):
-    #             self.log(
-    #                 f"   ** Failed to return decimal degrees from {guilty_party}")
-    #     else:
-    #         self.log(f"   ** exifread found no tags")
-    #     # return date_tuple, dd, xdms, ydms, guilty_party
-    #     return date_tuple, dd, xdms, ydms, guilty_party
-
     # ...............................................
     def get_image_metadata(self, fullname=None):
         if fullname is None:
             fullname = self.fullpath
         tags = None
         # Read image metadata
-        self.log(f"Reading {fullname}")
         try:
             # Open file in binary mode
             f = open(fullname, "rb")
             # Get Exif tags
             tags = exifread.process_file(f)
         except Exception as e:
-            self.log(f"   ** Unable to read image metadata, {e}")
+            self.log(f"   ** Unable to read image {fullname} metadata, {e}")
         finally:
             try:
                 f.close()
             except:
                 pass
         if not tags:
-            self.log(f"   ** exifread found no tags")
+            self.log(f"   ** exifread found no tags in {fullname}")
         return tags
 
     # ...............................................
@@ -277,18 +240,6 @@ class DamMeta(object):
         except:
             pass
         return date_tuple, guilty_party
-
-    # # ...............................................
-    # def _get_date(self, tags):
-    #     # Get date
-    #     dtstr = self._get_val_from_alternative_keys(tags, IMG_META.DATE_KEY_OPTS)
-    #
-    #     if dtstr is not None:
-    #         try:
-    #             return [int(x) for x in dtstr.split(":")]
-    #         except:
-    #             self.log(f"datestr {dtstr} cannot be parsed into integers")
-    #     return []
 
     # ...............................................
     def _get_location_vals(self, tags, locKey, dirKey):
@@ -404,7 +355,9 @@ class DamMeta(object):
             else:
                 (orig_w, _) = img.size
                 if orig_w <= width:
-                    self.log(f"Image {self.fullpath} width {orig_w} cannot be reduced, saving to {outfname}")
+                    self.log(
+                        f"Image {self.fullpath} width {orig_w} cannot be reduced to " +
+                        f"{width}, saving to {outfname}")
                     img.save(outfname)
                 else:
                     wpercent = (width / float(img.size[0]))
@@ -412,6 +365,5 @@ class DamMeta(object):
                     size = (width, height)
                     img = img.resize(size, sample_method)
                     img.save(outfname)
-                    self.log(f"Reduced image {self.fullpath}, width {orig_w} to {outfname}, width {width}")
                     resized = True
         return resized

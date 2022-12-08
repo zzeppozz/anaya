@@ -53,11 +53,11 @@ if __name__ == "__main__":
     stamp(logger, "Start")
 
     # Sets all_data dictionary on object
-    pm.populate_images()
-    stamp(logger, "Read filenames")
+    read_count = pm.populate_images()
+    stamp(logger, f"Read {read_count} filenames")
 
     # # Rewrite thumbnails of all images
-    total = pm.resize_images(outpath, resize_width=800, overwrite=False)
+    total = pm.resize_images(outpath, resize_width=800, overwrite=True)
     stamp(logger, f"Wrote {total} thumbnails")
 
     # Write data to CSV, Shapefile, KML
@@ -66,6 +66,8 @@ if __name__ == "__main__":
 
     # Write out replicated coordinates
     pm.print_duplicates()
+    pm.print_summary()
+
     #
     # # Test that we have the expected number of records
     # pm.test_counts()

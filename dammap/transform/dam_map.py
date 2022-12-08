@@ -140,21 +140,21 @@ class PicMapper(object):
         if damrec[IK.IN_BNDS] == 1:
             wkt = damrec[IK.WKT]
             feat = ogr.Feature( lyr.GetLayerDefn() )
-            try:
-                for fldname, _fldtype in SHP_FIELDS:
-                    if fldname in (IK.IMG_DATE, IK.DAM_DATE):
-                        datestr = self._format_date(damrec[fldname])
-                        feat.SetField(fldname, datestr)
-                    else:
-                        feat.SetField(fldname, damrec[fldname])
-                geom = ogr.CreateGeometryFromWkt(wkt)
-                feat.SetGeometryDirectly(geom)
-            except Exception as e:
-                self._logger.warn(f"Failed to fillOGRFeature, e = {e}")
-            else:
-                # Create new feature, setting FID, in this layer
-                lyr.CreateFeature(feat)
-                feat.Destroy()
+            for fldname, _fldtype in SHP_FIELDS:
+                val = damrec[fldname]
+                if fldname in (IK.IMG_DATE, IK.DAM_DATE):
+                    val = self._format_date(damrec[fldname])
+                # elif fldname in (IK.VERB_LON, IK.VERB_LON_DIR, IK.VERB_LAT, IK.VERB_LAT_DIR):
+                #     val = f"{damrec[fldname]}"
+                try:
+                    feat.SetField(fldname, val)
+                except Exception as e:
+                    self._logger.warn(f"Failed to SetField for field {fldname}, value {val}, err = {e}")
+            geom = ogr.CreateGeometryFromWkt(wkt)
+            feat.SetGeometryDirectly(geom)
+            # Create new feature, setting FID, in this layer
+            lyr.CreateFeature(feat)
+            feat.Destroy()
 
     # ...............................................
     def _create_feat_kml(self, kmlf, rel_thumbfname, damrec):
@@ -477,6 +477,13 @@ class PicMapper(object):
                 self.all_data[ADK.UNIQUE_COORDS]["no_geo"][dimg.arroyo_name] = [dimg.relfname]
 
     # ...............................................
+    def _add_to_unique_cameras(self, dimg):
+        if dimg.guilty_party in self.all_data[ADK.UNIQUE_CAMERAS].keys():
+            self.all_data[ADK.UNIQUE_CAMERAS][dimg.guilty_party] += 1
+        else:
+            self.all_data[ADK.UNIQUE_CAMERAS][dimg.guilty_party] = 1
+
+    # ...............................................
     def populate_images(self):
         """Read metadata from the directory names and filenames within image_path.
 
@@ -502,7 +509,8 @@ class PicMapper(object):
             ADK.IMAGE_OUT_OF_RANGE: {},
             ADK.IMG_COUNT: 0,
             ADK.IMG_GEO_COUNT: 0,
-            ADK.UNIQUE_COORDS: {"no_geo": {}}
+            ADK.UNIQUE_COORDS: {"no_geo": {}},
+            ADK.UNIQUE_CAMERAS: {}
         }
         for root, _, files in os.walk(self.image_path):
             for fname in files:
@@ -512,11 +520,13 @@ class PicMapper(object):
                     fullfname = os.path.join(root, fname)
 
                     # Get metadata from directory and filename
-                    dimg = DamMeta(fullfname, self.image_path)
+                    dimg = DamMeta(fullfname, self.image_path, logger=self._logger)
                     # Add image metadata object to image_meta list
                     self.all_data[ADK.IMAGE_META][dimg.relfname] = dimg
-                    # Add relfname to unique_coordinate dictionary by arroyo
+                    # Add relfname to unique_coordinate  by arroyo
                     self._add_to_unique_coords(dimg)
+                    # Increment count for each camera in dictionary
+                    self._add_to_unique_cameras(dimg)
                     # Evaluate point within expected boundary
                     if dimg.dd_ok:
                         self.all_data[ADK.IMG_GEO_COUNT] += 1
@@ -567,6 +577,17 @@ class PicMapper(object):
         return unique_coord_counts, wkt_by_count
 
     # ...............................................
+    def _get_location_camera_info(self, relfname):
+        dimg = self.all_data[ADK.IMAGE_META][relfname]
+        if dimg:
+            lon = f"{dimg.verbatim_longitude} {dimg.verbatim_longitude_direction}"
+            lat = f"{dimg.verbatim_latitude} {dimg.verbatim_latitude_direction}"
+            camera = f"{dimg.guilty_party}"
+            return f"{lon},  {lat},  {camera}"
+        else:
+            return f"Cannot find image object for {relfname}"
+
+    # ...............................................
     def print_duplicates(self):
         if not self.all_data:
             self.populate_images()
@@ -580,6 +601,7 @@ class PicMapper(object):
             self._logger.info(f"   Arroyo {arr}:")
             for fn in relfnames:
                 self._logger.info(f"      {fn}")
+
         # Print duplicates, starting with highest number of images per wkt
         ordered_counts = list(wkt_by_count.keys())
         ordered_counts.sort(reverse=True)
@@ -588,36 +610,30 @@ class PicMapper(object):
                 wkts = wkt_by_count[image_count]
                 for wkt in wkts:
                     if wkt != "no_geo":
+                        self._logger.info("")
                         self._logger.info(f"** {image_count} images with the same coordinates {wkt}")
                         for key, val in unique_coord_counts[wkt].items():
                             # key is arroyo_name
                             if not key.endswith("_count"):
                                 self._logger.info(f"   arroyo: {key} has {val} images for wkt")
                                 for relfname in self.all_data[ADK.UNIQUE_COORDS][wkt][key]:
-                                    self._logger.info(f"      image: {relfname}")
-        #
-        # for wkt, arroyo_dict in self.all_data[ADK.UNIQUE_COORDS].items():
-        #     rfns = [rfn for rfn in relfnames in arroyo_dict.values()]
-        #     for arroyo, relfnames in arroyo_dict:
-        #         if wkt != "no_geo" and len(relfnames) > 1:
-        #             dimgs = [self.all_data[ADK.IMAGE_META][rfn] for rfn in relfnames]
-        #             self._logger.info(f"   Arroyo {arr}:")
-        #             first_arroyo = dimgs[0].arroyo_name
-        #             first_date = dimgs[0].img_date
-        #             self._logger.info(f"Coordinates replicated {len(relfnames)} times: {wkt} ")
-        #             self._logger.info(
-        #                 f"   Comparing first pic {dimgs[0].relfname}: arroyo {first_arroyo} " +
-        #                 f"on {self._format_date(first_date)}")
-        #             for dimg in dimgs[1:]:
-        #                 if dimg.arroyo_name == first_arroyo:
-        #                     if dimg.img_date == first_date:
-        #                         self._logger.info(f"   {dimg.relfname}: Same arroyo and date")
-        #                     else:
-        #                         self._logger.info(f"   {dimg.relfname}: Date differs")
-        #                 elif dimg.img_date == first_date:
-        #                     self._logger.info(f"   {dimg.relfname}: Arroyo differs")
-        #                 else:
-        #                     self._logger.info(f"   {dimg.relfname}: Arroyo and date differ")
+                                    coords_camera = self._get_location_camera_info(relfname)
+                                    self._logger.info(f"      image: {relfname}, ({coords_camera})")
+
+
+    # ...............................................
+    def print_summary(self):
+        self._logger.info("")
+        self._logger.info("Summary:")
+        self._logger.info(f"   Basepath: {self.all_data[ADK.BASE_PATH]})")
+        self._logger.info(f"   Arroyos: {self.all_data[ADK.ARROYO_COUNT]})")
+        self._logger.info(f"   Out of range: {len(self.all_data[ADK.IMAGE_OUT_OF_RANGE])}")
+        self._logger.info(f"   Images: {self.all_data[ADK.IMG_COUNT]})")
+        self._logger.info(f"   In bounds: {self.all_data[ADK.IMG_GEO_COUNT]})")
+        self._logger.info("Cameras:")
+        for camera, count in self.all_data[ADK.UNIQUE_CAMERAS].items():
+            self._logger.info(f" {camera}: {count}")
+
 
     # # ...............................................
     # def test_counts(self):

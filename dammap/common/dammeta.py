@@ -14,7 +14,10 @@ class DamMeta(object):
             self, fullpath, basepath,
             thumbpath=None, arroyo_num=None, arroyo_name=None,
             dam_name=None, dam_date=None, picnum=None,
-            img_date=None, longitude=None, latitude=None,
+            img_date=None,
+            verbatim_longitude=None, verbatim_latitude=None,
+            verbatim_longitude_direction=None, verbatim_latitude_direction=None,
+            longitude=None, latitude=None,
             x_dir=None, x_deg=None, x_min=None, x_sec=None,
             y_dir=None, y_deg=None, y_min=None, y_sec=None,
             in_bounds=None, no_geo=None, logger=None):
@@ -32,10 +35,19 @@ class DamMeta(object):
             dam_date (str): date of the dam as determined by the file name
             picnum (str): number of the image file as determined by the file name
             img_date (str): date of the image as determined by the image file metadata
+            verbatim_longitude (str): longitude value of the image as reported by the
+                image file metadata (d, m, s)
+            verbatim_latitude (str): longitude value of the image as reported by the
+                image file metadata (d, m, s)
+            verbatim_longitude_direction (str): longitude direction (E, W) of the
+                image as reported by the image file metadata
+            verbatim_latitude_direction (str): latitude direction (N, S) of the
+                image as reported by the image file metadata
             longitude (float): longitude in decimal degrees of the image as computed
                 from the image file metadata
             latitude (float): latitude in decimal degrees of the image as computed
                 from the image file metadata
+
             x_dir (str): W (west corresponds to a negative longitude) or E (east
                 corresponds to a positive longitude) of the prime meridian, as read
                 from the image metadata.
@@ -70,6 +82,10 @@ class DamMeta(object):
         self.y_dir = y_dir
         self.longitude = longitude
         self.latitude = latitude
+        self.verbatim_longitude = verbatim_longitude
+        self.verbatim_latitude = verbatim_latitude
+        self.verbatim_longitude_direction = verbatim_longitude_direction
+        self.verbatim_latitude_direction = verbatim_latitude_direction
         self.img_date = img_date
         self.thumbpath = thumbpath
         self.in_bounds = in_bounds
@@ -93,13 +109,19 @@ class DamMeta(object):
         if None in (
                 x_deg, x_min, x_sec, x_dir, y_deg, y_min, y_sec, y_dir,
                 longitude, latitude):
-            (self.img_date, xydd, xdms, ydms, self.guilty_party
-             ) = self.get_image_metadata()
-            if None not in (xydd, xdms, ydms):
-                (self.x_deg, self.x_min, self.x_sec, self.x_dir) = xdms
-                (self.y_deg, self.y_min, self.y_sec, self.y_dir) = ydms
-                self.longitude = xydd[0]
-                self.latitude = xydd[1]
+            tags = self.get_image_metadata()
+            if tags:
+                self.img_date, self.guilty_party = self.get_camera_date(tags)
+                xydd, xdms, ydms, verbatim_coordinates = self._get_coordinates(tags)
+                if None not in (xydd, xdms, ydms, verbatim_coordinates):
+                    (self.verbatim_longitude,
+                     self.verbatim_longitude_direction,
+                     self.verbatim_latitude,
+                     self.verbatim_latitude_direction) = verbatim_coordinates
+                    (self.x_deg, self.x_min, self.x_sec, self.x_dir) = xdms
+                    (self.y_deg, self.y_min, self.y_sec, self.y_dir) = ydms
+                    self.longitude = xydd[0]
+                    self.latitude = xydd[1]
         self.set_wkt()
 
     # ...............................................
@@ -160,7 +182,7 @@ class DamMeta(object):
 
     # ...............................................
     def _get_val_from_alternative_keys(self, tags, alternative_keys):
-        # Get value
+        # Get value, first matching alternative key takes precedence
         for key in alternative_keys:
             try:
                 valstr = tags[key].values
@@ -179,11 +201,47 @@ class DamMeta(object):
 
         return valstr
 
+    # # ...............................................
+    # def get_image_metadata(self, fullname=None):
+    #     if fullname is None:
+    #         fullname = self.fullpath
+    #     tags = date_tuple = dd = xdms = ydms = None
+    #     # Read image metadata
+    #     self.log(f"Reading {fullname}")
+    #     try:
+    #         # Open file in binary mode
+    #         f = open(fullname, "rb")
+    #         # Get Exif tags
+    #         tags = exifread.process_file(f)
+    #     except Exception as e:
+    #         self.log(f"   ** Unable to read image metadata, {e}")
+    #     finally:
+    #         try:
+    #             f.close()
+    #         except:
+    #             pass
+    #     # Parse image metadata
+    #     guilty_party = "unknown"
+    #     if tags:
+    #         try:
+    #             guilty_party = f"{tags['Image Make']}: {tags['Image Model']}"
+    #         except:
+    #             pass
+    #         dd, xdms, ydms = self._get_dd(tags)
+    #         date_tuple = self._get_date(tags)
+    #         if None in (dd, xdms, ydms):
+    #             self.log(
+    #                 f"   ** Failed to return decimal degrees from {guilty_party}")
+    #     else:
+    #         self.log(f"   ** exifread found no tags")
+    #     # return date_tuple, dd, xdms, ydms, guilty_party
+    #     return date_tuple, dd, xdms, ydms, guilty_party
+
     # ...............................................
     def get_image_metadata(self, fullname=None):
         if fullname is None:
             fullname = self.fullpath
-        tags = date_tuple = dd = xdms = ydms = None
+        tags = None
         # Read image metadata
         self.log(f"Reading {fullname}")
         try:
@@ -198,36 +256,42 @@ class DamMeta(object):
                 f.close()
             except:
                 pass
-        # Parse image metadata
-        guilty_party = "unknown"
-        if tags:
-            try:
-                guilty_party = f"{tags['Image Make']}: {tags['Image Model']}"
-            except:
-                pass
-            dd, xdms, ydms = self._get_dd(tags)
-            date_tuple = self._get_date(tags)
-            if None in (dd, xdms, ydms):
-                self.log(
-                    f"   ** Failed to return decimal degrees from {guilty_party}")
-        else:
+        if not tags:
             self.log(f"   ** exifread found no tags")
-        return date_tuple, dd, xdms, ydms, guilty_party
+        return tags
 
     # ...............................................
-    def _get_date(self, tags):
+    def get_camera_date(self, tags):
         # Get date
+        date_tuple = [0, 0, 0]
         dtstr = self._get_val_from_alternative_keys(tags, IMG_META.DATE_KEY_OPTS)
-
         if dtstr is not None:
             try:
-                return [int(x) for x in dtstr.split(":")]
+                date_tuple = [int(x) for x in dtstr.split(":")]
             except:
                 self.log(f"datestr {dtstr} cannot be parsed into integers")
-        return []
+        # Get camera and model
+        guilty_party = "unknown"
+        try:
+            guilty_party = f"{tags['Image Make']}: {tags['Image Model']}"
+        except:
+            pass
+        return date_tuple, guilty_party
+
+    # # ...............................................
+    # def _get_date(self, tags):
+    #     # Get date
+    #     dtstr = self._get_val_from_alternative_keys(tags, IMG_META.DATE_KEY_OPTS)
+    #
+    #     if dtstr is not None:
+    #         try:
+    #             return [int(x) for x in dtstr.split(":")]
+    #         except:
+    #             self.log(f"datestr {dtstr} cannot be parsed into integers")
+    #     return []
 
     # ...............................................
-    def _get_location_vals(self, tags, locKey, dirKey, negativeIndicator):
+    def _get_location_vals(self, tags, locKey, dirKey):
         dd = degrees = minutes = seconds = nsew = None
         isNegative = False
         # Get longitude or latitude
@@ -237,7 +301,7 @@ class DamMeta(object):
             pass
         else:
             nsew = tags[dirKey].printable
-            if nsew == negativeIndicator:
+            if nsew in IMG_META.NEGATIVE_INDICATORS:
                 isNegative = True
             # Convert to float
             degrees = float(degObj.real)
@@ -250,22 +314,37 @@ class DamMeta(object):
         return dd, degrees, minutes, seconds, nsew
 
     # ...............................................
-    def _get_dd(self, tags):
-        dd = xdms = ydms = None
+    def _get_coordinates(self, tags):
+        dd = xdms = ydms = verbatim_coordinates = None
+        gpskeys = [k for k in tags.keys() if k.startswith("GPS")]
         # Are the GPS tags present?
-        if IMG_META.X_KEY in tags.keys() and IMG_META.Y_KEY in tags.keys():
-            xdd, xdeg, xmin, xsec, xdir = self._get_location_vals(
-                tags, IMG_META.X_KEY, IMG_META.X_DIR_KEY, "W")
-            ydd, ydeg, ymin, ysec, ydir = self._get_location_vals(
-                tags, IMG_META.Y_KEY, IMG_META.Y_DIR_KEY, "S")
-            # Convert to desired format
-            dd = (xdd, ydd)
-            xdms = (xdeg, xmin, xsec, xdir)
-            ydms = (ydeg, ymin, ysec, ydir)
+        try:
+            verbatim_longitude = f"{tags[IMG_META.X_KEY]}"
+            verbatim_latitude = f"{tags[IMG_META.Y_KEY]}"
+        except KeyError as e:
+            self.log(
+                f"Missing tag in {gpskeys} for {self.guilty_party}, {e}")
         else:
-            self.log(f"Missing {IMG_META.X_KEY} or {IMG_META.Y_KEY} in tags for camera {self.guilty_party}")
+            try:
+                verbatim_longitude_dir = f"{tags[IMG_META.X_DIR_KEY]}"
+                verbatim_latitude_dir = f"{tags[IMG_META.Y_DIR_KEY]}"
+            except KeyError as e:
+                self.log(
+                    f"Missing direction tag in {gpskeys} for {self.guilty_party}, {e}")
+            else:
+                verbatim_coordinates = (
+                    verbatim_longitude, verbatim_longitude_dir,
+                    verbatim_latitude, verbatim_latitude_dir)
+                xdd, xdeg, xmin, xsec, xdir = self._get_location_vals(
+                    tags, IMG_META.X_KEY, IMG_META.X_DIR_KEY)
+                ydd, ydeg, ymin, ysec, ydir = self._get_location_vals(
+                    tags, IMG_META.Y_KEY, IMG_META.Y_DIR_KEY)
+                # Convert to desired format
+                dd = (xdd, ydd)
+                xdms = (xdeg, xmin, xsec, xdir)
+                ydms = (ydeg, ymin, ysec, ydir)
 
-        return dd, xdms, ydms
+        return dd, xdms, ydms, verbatim_coordinates
 
     # ...............................................
     @property
@@ -298,6 +377,10 @@ class DamMeta(object):
             IMAGE_KEYS.LON: self.longitude,
             IMAGE_KEYS.LAT: self.latitude,
             IMAGE_KEYS.WKT: self.wkt,
+            IMAGE_KEYS.VERB_LON: self.verbatim_longitude,
+            IMAGE_KEYS.VERB_LAT: self.verbatim_latitude,
+            IMAGE_KEYS.VERB_LON_DIR: self.verbatim_longitude_direction,
+            IMAGE_KEYS.VERB_LAT_DIR: self.verbatim_latitude_direction,
             IMAGE_KEYS.X_DIR: self.x_dir,
             IMAGE_KEYS.X_DEG: self.x_deg,
             IMAGE_KEYS.X_MIN: self.x_min,

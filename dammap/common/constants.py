@@ -30,6 +30,7 @@ class ALL_DATA_KEYS ():
     IMG_COUNT = "img_count"
     IMG_GEO_COUNT = "img_count_geo"
     UNIQUE_COORDS = "unique_coordinates"
+    UNIQUE_CAMERAS = "cameras"
 
 # Metadata for image files
 class IMAGE_KEYS():
@@ -47,6 +48,10 @@ class IMAGE_KEYS():
     LON = "longitude"
     LAT = "latitude"
     WKT = "geomwkt"
+    VERB_LON = "vlong"
+    VERB_LAT = "vlat"
+    VERB_LON_DIR = "vlong_dir"
+    VERB_LAT_DIR = "vlat_dir"
     X_DIR = "x_dir"
     X_DEG = "x_deg"
     X_MIN = "x_min"
@@ -71,6 +76,10 @@ SHP_FIELDS = [
     (IMAGE_KEYS.LON, ogr.OFTReal),
     (IMAGE_KEYS.LAT, ogr.OFTReal),
     (IMAGE_KEYS.WKT, ogr.OFTString),
+    # (IMAGE_KEYS.VERB_LON, ogr.OFTString),
+    # (IMAGE_KEYS.VERB_LAT, ogr.OFTString),
+    # (IMAGE_KEYS.VERB_LON_DIR, ogr.OFTString),
+    # (IMAGE_KEYS.VERB_LAT_DIR, ogr.OFTString),
     (IMAGE_KEYS.X_DIR, ogr.OFTString),
     (IMAGE_KEYS.X_DEG, ogr.OFTInteger),
     (IMAGE_KEYS.X_MIN, ogr.OFTInteger),
@@ -95,11 +104,13 @@ SHP_FIELDS = [
 
 # .............................................................................
 class IMG_META:
+    """Class with metadata tags and value options in image files"""
     X_KEY = "GPS GPSLongitude"
     X_DIR_KEY = "GPS GPSLongitudeRef"
     Y_KEY = "GPS GPSLatitude"
     Y_DIR_KEY = "GPS GPSLatitudeRef"
     DATE_KEY_OPTS = ["GPS GPSDate", "Image DateTime", "EXIF DateTimeOriginal"]
+    NEGATIVE_INDICATORS = ["W", "S"]
 
 BAD_PATH = "/tank/anaya/dams/"
 BAD_FILES = [

@@ -48,41 +48,6 @@ class PicMapper(object):
             logger = get_logger(os.path.join(self.base_path, OUT_DIR))
         self._logger = logger
 
-    # # ...............................................
-    # def _open_kml_file(self, fname):
-    #     """
-    #     @todo: gather bounds from images
-    #     """
-    #     (min_x, min_y, max_x, max_y) = self.bbox
-    #     if os.path.exists(fname):
-    #         os.remove(fname)
-    #     foldername, _ = os.path.splitext(os.path.basename(fname))
-    #     rel_satellite_fname = os.path.join("../..", ANC_DIR, SAT_FNAME)
-    #     f = open(fname, "w")
-    #     f.write("<?xml version="1.0" encoding="utf-8" ?>\n")
-    #     f.write("<kml xmlns="http://www.opengis.net/kml/2.2">\n")
-    #     f.write("<Document id="root_doc">\n")
-    #     f.write("<Folder><name>{}</name>\n".format(foldername))
-    #     f.write("   <GroundOverlay>\n")
-    #     f.write("      <name>Satellite overlay on terrain</name>\n")
-    #     f.write("      <description>Local imagery</description>\n")
-    #     f.write("      <Icon><href>{}</href></Icon>\n".format(rel_satellite_fname))
-    #     f.write("      <LatLonBox>\n")
-    #     f.write("         <north>{}</north>\n".format(max_y))
-    #     f.write("         <south>{}</south>\n".format(min_y))
-    #     f.write("         <east>{}</east>\n".format(max_x))
-    #     f.write("         <west>{}</west>\n".format(min_x))
-    #     f.write("         <rotation>-0.1556640799496235</rotation>\n")
-    #     f.write("      </LatLonBox>\n")
-    #     f.write("   </GroundOverlay>\n")
-    #     return f
-    # 
-    # # ...............................................
-    # def _close_kml_file(self, kmlf):
-    #     kmlf.write("</Folder>\n")
-    #     kmlf.write("</Document></kml>\n")
-    #     kmlf.close()
-
     # ...............................................
     def _create_layer(self, fields, shpFname):
         ogr.RegisterAll()
@@ -687,7 +652,8 @@ class PicMapper(object):
                 self.all_data[ADK.IMG_COUNT], IMAGE_COUNT))
 
     # ...............................................
-    def resize_images(self, outpath, resize_width=RESIZE_WIDTH, overwrite=True):
+    def resize_images(
+            self, outpath, small_width=0, medium_width=0, large_width=0, overwrite=True):
         """Resize all original images in the image_path tree.
 
         Args:
@@ -701,14 +667,23 @@ class PicMapper(object):
         for relfname, dimg in self.all_data[ADK.IMAGE_META].items():
             if dimg.dd_ok:
                 dimg.set_logger(self._logger)
-                dimg.thumbpath = os.path.join(outpath, THUMB_DIR, dimg.relfname)
-
-                # Rewrite the image
-                resized = dimg.resize(
-                    dimg.thumbpath, resize_width, sample_method=Image.ANTIALIAS,
-                    overwrite=overwrite)
-                if resized is True:
-                    count += 1
+                # Rewrite the image for each size in resize_width
+                for w in [small_width, medium_width, large_width]:
+                    if w == small_width:
+                        use_undersize = True
+                    thumb_fname = os.path.join(
+                        outpath, f"{THUMB_DIR}{w}", dimg.relfname)
+                    resized = dimg.resize(
+                        thumb_fname, w, sample_method=Image.ANTIALIAS,
+                        use_undersize=use_undersize, overwrite=overwrite)
+                    if resized is True:
+                        count += 1
+                        if w == small_width:
+                            dimg.thumb_small = thumb_fname
+                        elif w == medium_width:
+                            dimg.thumb_medium = thumb_fname
+                        if w == large_width:
+                            dimg.thumb_large = thumb_fname
         return count
 
 # .............................................................................

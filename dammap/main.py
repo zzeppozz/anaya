@@ -4,6 +4,7 @@ import os
 import time
 
 from dammap.common.constants import (IN_DIR, OUT_DIR, THUMB_DIR)
+from dammap.common.name import fix_names_in_tree
 from dammap.common.util import (get_logger, stamp)
 from transform.dam_map import PicMapper
 
@@ -29,17 +30,12 @@ if __name__ == "__main__":
     dam_buffer = .0002
     bbox = (minX, minY, maxX, maxY)
 
-    # parser = argparse.ArgumentParser(
-    #     description="Process image data, to create geospatial outputs.")
-    # parser.add_argument(
-    #     "basepath", type=str, default=BASE_PATH,
-    #     help="The base path for Dam Anaya input data and outputs.")
-    # args = parser.parse_args()
-    # inpath = args.inpath
-
     inpath = os.path.join(BASE_PATH, IN_DIR)
     outpath = os.path.join(BASE_PATH, OUT_DIR)
     resize_path = os.path.join(outpath, THUMB_DIR)
+
+    # newpath = os.path.join(BASE_PATH, "newdams")
+    # fix_names_in_tree(newpath, do_files=True)
 
     # Define output filenames
     base_fname = os.path.join(outpath, "anaya_dams")
@@ -57,7 +53,8 @@ if __name__ == "__main__":
     stamp(logger, f"Read {read_count} filenames")
 
     # # Rewrite thumbnails of all images
-    total = pm.resize_images(outpath, resize_width=800, overwrite=True)
+    total = pm.resize_images(
+        outpath, small_width=800, medium_width=1200, large_width=2000, overwrite=True)
     stamp(logger, f"Wrote {total} thumbnails")
 
     # Write data to CSV, Shapefile, KML
@@ -67,82 +64,3 @@ if __name__ == "__main__":
     # Write out replicated coordinates
     pm.print_duplicates()
     pm.print_summary()
-
-    #
-    # # Test that we have the expected number of records
-    # pm.test_counts()
-    # stamp("Tested counts")
-    #
-    # orig_all_data = pm.all_data
-    # pm.read_csv_data(csv_fname)
-    # stamp("Read CSV data")
-    # # pm.compare_all_data(orig_all_data)
-    #
-    # # Test that we have the expected number of records
-    # pm.test_counts()
-    # stamp("Tested counts again")
-    # stamp("Finished")
-    #
-    # print("Given: {}".format(pm.bbox))
-    # print("Computed: {}".format(pm.extent))
-
-"""
-
-#SCHEMA#
-<Schema name="anaya_springs" id="anaya_springs">
-          <SimpleField name="arroyo" type="string"></SimpleField>
-          <SimpleField name="fullpath" type="string"></SimpleField>
-          <SimpleField name="relpath" type="string"></SimpleField>
-          <SimpleField name="basename" type="string"></SimpleField>
-          <SimpleField name="geomwkt" type="string"></SimpleField>
-          <SimpleField name="longitude" type="float"></SimpleField>
-          <SimpleField name="latitude" type="float"></SimpleField>
-          <SimpleField name="xdirection" type="string"></SimpleField>
-          <SimpleField name="xdegrees" type="float"></SimpleField>
-          <SimpleField name="xminutes" type="float"></SimpleField>
-          <SimpleField name="xseconds" type="float"></SimpleField>
-          <SimpleField name="ydirection" type="string"></SimpleField>
-          <SimpleField name="ydegrees" type="float"></SimpleField>
-          <SimpleField name="yminutes" type="float"></SimpleField>
-          <SimpleField name="yseconds" type="float"></SimpleField>
-</Schema>
-
-#FOLDERNAME#
-<name>anaya_springs</name>
-
-#PLACEMARKS#
-  <Placemark>
-    <ExtendedData><SchemaData schemaUrl="#anaya_springs">
-        <SimpleData name="arroyo">1 RR-Bill"s toptobottom</SimpleData>
-        <SimpleData name="fullpath">/Users/astewart/Home/AnneBill/AnayaSprings/1 RR-Bill"s toptobottom/201411_anaya20141103_0020.JPG</SimpleData>
-        <SimpleData name="relpath">AnayaSprings/1 RR-Bill"s toptobottom/201411_anaya20141103_0020.JPG</SimpleData>
-        <SimpleData name="basename">201411_anaya20141103_0020.JPG</SimpleData>
-        <SimpleData name="geomwkt">Point (-106.0620556  35.4359889)</SimpleData>
-        <SimpleData name="longitude">-106.062055555555560</SimpleData>
-        <SimpleData name="latitude">35.435988888888886</SimpleData>
-        <SimpleData name="xdirection">W</SimpleData>
-        <SimpleData name="xdegrees">106.000000000000000</SimpleData>
-        <SimpleData name="xminutes">3.000000000000000</SimpleData>
-        <SimpleData name="xseconds">43.399999999999999</SimpleData>
-        <SimpleData name="ydirection">N</SimpleData>
-        <SimpleData name="ydegrees">35.000000000000000</SimpleData>
-        <SimpleData name="yminutes">26.000000000000000</SimpleData>
-        <SimpleData name="yseconds">9.560000000000000</SimpleData>
-    </SchemaData></ExtendedData>
-        <Point><coordinates>-106.0620556,35.4359889</coordinates></Point>
-  </Placemark>
-
-<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
-<Placemark>
-    <name>Grey-Bottom20151201_0002.JPG</name>
-    <description>Grey-Bottom20151201_0002 in 13-LL-GreyBottom on 2015-12-1</description>
-    <gx:balloonVisibility>1</gx:balloonVisibility>
-    <Point>
-        <coordinates>-106.067033333,35.4413833333,0</coordinates>
-    </Point>
-    <img style="max-width:500px;" dammap="file:///Users/astewart/Home/2017AnayaPics/13-LL-GreyBottom/Grey-Bottom20151201_0002.JPG"></img>
-</Placemark>
-</kml>
-
-"""

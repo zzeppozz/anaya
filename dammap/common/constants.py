@@ -36,7 +36,9 @@ class ALL_DATA_KEYS ():
 class IMAGE_KEYS():
     # Data from directory and filenames
     FILE_PATH = "fullpath"
-    THUMB_PATH = "thumbpath"
+    THUMB_SMALL = "thumb_sm"
+    THUMB_MEDIUM = "thumb_med"
+    THUMB_LARGE = "thumb_lg"
     BASE_NAME = "basename"
     ARROYO_NAME = "arroyo"
     ARROYO_NUM = "arroyo_num"
@@ -65,7 +67,9 @@ class IMAGE_KEYS():
 
 SHP_FIELDS = [
     (IMAGE_KEYS.FILE_PATH, ogr.OFTString),
-    (IMAGE_KEYS.THUMB_PATH, ogr.OFTString),
+    (IMAGE_KEYS.THUMB_SMALL, ogr.OFTString),
+    (IMAGE_KEYS.THUMB_MEDIUM, ogr.OFTString),
+    (IMAGE_KEYS.THUMB_LARGE, ogr.OFTString),
     (IMAGE_KEYS.BASE_NAME, ogr.OFTString),
     (IMAGE_KEYS.ARROYO_NAME, ogr.OFTString),
     (IMAGE_KEYS.ARROYO_NUM, ogr.OFTInteger),

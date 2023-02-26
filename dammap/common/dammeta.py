@@ -12,7 +12,8 @@ class DamMeta(object):
     # .............................................................................
     def __init__(
             self, fullpath, basepath,
-            thumbpath=None, arroyo_num=None, arroyo_name=None,
+            thumb_small=None, thumb_medium=None, thumb_large=None,
+            arroyo_num=None, arroyo_name=None,
             dam_name=None, dam_date=None, picnum=None,
             img_date=None,
             verbatim_longitude=None, verbatim_latitude=None,
@@ -27,7 +28,11 @@ class DamMeta(object):
             fullpath(str): Full filename and path
             relative_fname (str): directory and filename relative to a common
                 directory path
-            thumbpath (str): directory and filename of a thumbnail image relative to a
+            thumb_small (str): directory and filename of a thumbnail image relative to a
+                common directory path
+            thumb_medium (str): directory and filename of a thumbnail image relative to a
+                common directory path
+            thumb_large (str): directory and filename of a thumbnail image relative to a
                 common directory path
             arroyo_num (int): number of the arroyo as determined by the directory name
             arroyo_name (str): name of the arroyo as determined by the directory name
@@ -87,7 +92,9 @@ class DamMeta(object):
         self.verbatim_longitude_direction = verbatim_longitude_direction
         self.verbatim_latitude_direction = verbatim_latitude_direction
         self.img_date = img_date
-        self.thumbpath = thumbpath
+        self.thumb_small = thumb_small
+        self.thumb_medium = thumb_medium
+        self.thumb_large = thumb_large
         self.in_bounds = in_bounds
         self.arroyo_num = arroyo_num
         self.arroyo_name = arroyo_name
@@ -317,7 +324,9 @@ class DamMeta(object):
     def record(self):
         return {
             IMAGE_KEYS.FILE_PATH: self.fullpath,
-            IMAGE_KEYS.THUMB_PATH: self.thumbpath,
+            IMAGE_KEYS.THUMB_SMALL: self.thumb_small,
+            IMAGE_KEYS.THUMB_MEDIUM: self.thumb_medium,
+            IMAGE_KEYS.THUMB_LARGE: self.thumb_large,
             IMAGE_KEYS.BASE_NAME: self.basename,
             IMAGE_KEYS.ARROYO_NAME: self.arroyo_name,
             IMAGE_KEYS.ARROYO_NUM: self.arroyo_num,
@@ -345,8 +354,11 @@ class DamMeta(object):
         }
 
     # ...............................................
-    def resize(self, outfname, width, sample_method=Image.ANTIALIAS, overwrite=True, log=None):
+    def resize(
+            self, outfname, width, sample_method=Image.ANTIALIAS,
+            use_undersize=False, overwrite=True, log=None):
         resized = False
+        basename = os.path.basename(outfname)
         if ready_filename(outfname, overwrite=overwrite):
             try:
                 img = Image.open(self.fullpath)
@@ -355,15 +367,22 @@ class DamMeta(object):
             else:
                 (orig_w, _) = img.size
                 if orig_w <= width:
-                    self.log(
-                        f"Image {self.fullpath} width {orig_w} cannot be reduced to " +
-                        f"{width}, saving to {outfname}")
-                    img.save(outfname)
+                    if use_undersize:
+                        img.save(outfname)
+                        self.log(
+                            f"Saved original image {basename} with width {orig_w} "
+                            f"(unable to reduce to {width})")
+                    else:
+                        self.log(
+                            f"Image {basename} width {orig_w} cannot be reduced "
+                            f"to {width}")
                 else:
                     wpercent = (width / float(img.size[0]))
                     height = int(float(img.size[1]) * float(wpercent))
                     size = (width, height)
                     img = img.resize(size, sample_method)
                     img.save(outfname)
+                    self.log(
+                        f"Reduced image {basename} width {orig_w} to {width}")
                     resized = True
         return resized

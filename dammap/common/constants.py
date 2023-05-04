@@ -1,5 +1,8 @@
 from osgeo import ogr, osr
 
+MAC_PATH = "/Users/aimeestewart/Library/Mobile Documents/com~apple~CloudDocs/Documents/Home/Anaya/anaya_map"
+BASE_PATH = "/tank/anaya/"
+
 # Path/filenames
 IN_DIR = "dams"
 ANC_DIR = "ancillary"
@@ -36,9 +39,7 @@ class ALL_DATA_KEYS ():
 class IMAGE_KEYS():
     # Data from directory and filenames
     FILE_PATH = "fullpath"
-    THUMB_SMALL = "thumb_sm"
-    THUMB_MEDIUM = "thumb_med"
-    THUMB_LARGE = "thumb_lg"
+    THUMB = "thumb"
     BASE_NAME = "basename"
     ARROYO_NAME = "arroyo"
     ARROYO_NUM = "arroyo_num"
@@ -67,9 +68,7 @@ class IMAGE_KEYS():
 
 SHP_FIELDS = [
     (IMAGE_KEYS.FILE_PATH, ogr.OFTString),
-    (IMAGE_KEYS.THUMB_SMALL, ogr.OFTString),
-    (IMAGE_KEYS.THUMB_MEDIUM, ogr.OFTString),
-    (IMAGE_KEYS.THUMB_LARGE, ogr.OFTString),
+    (IMAGE_KEYS.THUMB, ogr.OFTString),
     (IMAGE_KEYS.BASE_NAME, ogr.OFTString),
     (IMAGE_KEYS.ARROYO_NAME, ogr.OFTString),
     (IMAGE_KEYS.ARROYO_NUM, ogr.OFTInteger),

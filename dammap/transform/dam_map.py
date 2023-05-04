@@ -4,7 +4,7 @@ from osgeo import ogr, osr
 from PIL import Image
 
 from dammap.common.constants import (
-    DELIMITER, ANC_DIR, THUMB_DIR, OUT_DIR, SAT_FNAME, RESIZE_WIDTH, ARROYO_COUNT,
+    BASE_PATH, DELIMITER, ANC_DIR, THUMB_DIR, OUT_DIR, SAT_FNAME, RESIZE_WIDTH, ARROYO_COUNT,
     IMAGE_COUNT, SHP_FIELDS)
 from dammap.common.util import (
     get_csv_dict_reader, get_csv_dict_writer, get_logger, ready_filename)
@@ -276,8 +276,7 @@ class PicMapper(object):
             # CSV file
             if csvwriter:
                 try:
-                    csvwriter.writerow(dimg.record)
-                    # self._write_row(csvwriter, csvfields, damrec)
+                    csvwriter.writerow(dimg.record_for_csv)
                 except Exception as e:
                     self._logger.error("Failed to write {}, {}".format(dimg.record, e))
             if dimg.in_bounds == 1:
@@ -652,6 +651,40 @@ class PicMapper(object):
                 self.all_data[ADK.IMG_COUNT], IMAGE_COUNT))
 
     # ...............................................
+    def _resize_image(
+            self, image, thumb_width, thumb_fname, overwrite=True):
+        success = True
+        thumb_base = os.path.basename(thumb_fname)
+        # If no width provided, copy that as thumbnail
+        if thumb_width is None:
+            if ready_filename(thumb_fname, overwrite=overwrite):
+                try:
+                    image.save(thumb_fname)
+                except Exception as e:
+                    success = False
+                    self._logger.info(
+                        f"Failed to copy image {thumb_base} as thumbnail ({e})")
+                else:
+                    self._logger.info(
+                        f"Copied image {thumb_base} original width {image.size[0]} as thumbnail")
+        else:
+            if ready_filename(thumb_fname, overwrite=overwrite):
+                wpercent = (thumb_width / float(image.size[0]))
+                thumb_height = int(float(image.size[1]) * float(wpercent))
+                size = (thumb_width, thumb_height)
+                try:
+                    img = image.resize(size, Image.ANTIALIAS)
+                    img.save(thumb_fname)
+                except Exception as e:
+                    success = False
+                    self._logger.info(
+                        f"Failed to copy image {thumb_base} as thumbnail ({e})")
+                else:
+                    self._logger.info(
+                        f"Reduced image {thumb_base} width {image.size[0]} to {thumb_width}")
+        return success
+
+    # ...............................................
     def resize_images(
             self, outpath, small_width=0, medium_width=0, large_width=0, overwrite=True):
         """Resize all original images in the image_path tree.
@@ -666,24 +699,29 @@ class PicMapper(object):
             self.populate_images()
         for relfname, dimg in self.all_data[ADK.IMAGE_META].items():
             if dimg.dd_ok:
-                dimg.set_logger(self._logger)
-                # Rewrite the image for each size in resize_width
-                for w in [small_width, medium_width, large_width]:
-                    if w == small_width:
-                        use_undersize = True
-                    thumb_fname = os.path.join(
-                        outpath, f"{THUMB_DIR}{w}", dimg.relfname)
-                    resized = dimg.resize(
-                        thumb_fname, w, sample_method=Image.ANTIALIAS,
-                        use_undersize=use_undersize, overwrite=overwrite)
-                    if resized is True:
-                        count += 1
-                        if w == small_width:
-                            dimg.thumb_small = thumb_fname
-                        elif w == medium_width:
-                            dimg.thumb_medium = thumb_fname
-                        if w == large_width:
-                            dimg.thumb_large = thumb_fname
+                # Get the width, regardless of whether writing
+                try:
+                    img = Image.open(dimg.fullpath)
+                except Exception as e:
+                    self._logger.error(f" *** Unable to open file {dimg.fullpath}, {e}")
+                else:
+                    (orig_w, _) = img.size
+
+                # Rewrite the image for one size in largest width smaller than original
+                thumb_fname = os.path.join(
+                    outpath, f"{THUMB_DIR}", dimg.relfname)
+                thumb_width = None
+                for w in (large_width, medium_width, small_width):
+                    if thumb_width is None and orig_w > w:
+                        thumb_width = w
+                # thumb_width may be None
+
+                exists = self._resize_image(
+                    img, thumb_width, thumb_fname, overwrite=overwrite)
+
+                if exists:
+                    dimg.thumb = thumb_fname[len(BASE_PATH):]
+                    count += 1
         return count
 
 # .............................................................................

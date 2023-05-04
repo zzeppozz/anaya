@@ -3,7 +3,7 @@ import argparse
 import os
 import time
 
-from dammap.common.constants import (IN_DIR, OUT_DIR, THUMB_DIR)
+from dammap.common.constants import (BASE_PATH, IN_DIR, OUT_DIR, THUMB_DIR)
 from dammap.common.name import fix_names_in_tree
 from dammap.common.util import (get_logger, stamp)
 from transform.dam_map import PicMapper
@@ -21,8 +21,6 @@ shp_flag = False
 # ...............................................
 if __name__ == "__main__":
     is_dev = False
-    MAC_PATH = "/Users/aimeestewart/Library/Mobile Documents/com~apple~CloudDocs/Documents/Home/Anaya/anaya_map"
-    BASE_PATH = "/tank/anaya/"
     maxY = 35.45045
     minY = 35.43479
     maxX = -106.05353
@@ -54,11 +52,12 @@ if __name__ == "__main__":
 
     # # Rewrite thumbnails of all images
     total = pm.resize_images(
-        outpath, small_width=800, medium_width=1200, large_width=2000, overwrite=True)
+        outpath, small_width=800, medium_width=1200, large_width=2000, overwrite=False)
     stamp(logger, f"Wrote {total} thumbnails")
 
     # Write data to CSV, Shapefile, KML
-    pm.write_outputs(csvfname=csv_fname, shpfname=shp_fname)
+    # pm.write_outputs(csvfname=csv_fname, shpfname=shp_fname)
+    pm.write_outputs(shpfname=shp_fname)
     stamp(logger, "Wrote shapefile")
 
     # Write out replicated coordinates

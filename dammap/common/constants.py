@@ -23,6 +23,11 @@ DELIMITER = "\t"
 ENCODING = "utf-8"
 SEPARATOR = "_"
 
+SPACE = " "
+PARENS = ["(", ")"]
+DELETES = ["'", ""]
+
+
 # Metadata for all dam data
 class ALL_DATA_KEYS ():
     BASE_PATH = "base_path"

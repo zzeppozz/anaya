@@ -81,6 +81,8 @@ class DamMeta(object):
         self.y_dir = y_dir
         self.longitude = longitude
         self.latitude = latitude
+        self.resolved_longitude = None
+        self.resolved_latitude = None
         self.verbatim_longitude = verbatim_longitude
         self.verbatim_latitude = verbatim_latitude
         self.verbatim_longitude_direction = verbatim_longitude_direction
@@ -309,7 +311,7 @@ class DamMeta(object):
     # ...............................................
     def set_wkt(self):
         if self.dd_ok:
-            self.wkt = "Point ({:.7f}  {:.7f})".format(self.longitude, self.latitude)
+            self. wkt = f"Point ({self.longitude:.7f}  {self.latitude:.7f})"
 
     # ...............................................
     @property

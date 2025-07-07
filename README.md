@@ -11,14 +11,36 @@ Project to georeference Anaya Springs arroyos
 
 * Pillow: Image processing, https://pillow.readthedocs.io/en/latest/handbook/index.html
 
+## Input data
+
+* dam images, organized by arroyo
+* directories named like xx_name, where xx is a number, and name is the  
+  arroyo name
+* files named like name_yyyy-mm-dd_xxx where name is some variation of the arroyo
+  name, and yyyy-mm-dd is the date, and xxx is the image number
+
+### 2023-05:
+
+* again, standardized names
+* found repeated images
+
+### 2024-01: 
+
+* added new_dams, standardizing names, to the dams directory
+* re-ran the program
+
+### 2025-07
+
+* Track files that share a similar location, within a buffer distance of the first 
+  coordinate encountered for that  
+
 ## Run
 
-dam_process.dam_map.PicMapper contains all the functions to read metadata,
+transform.dam_map.PicMapper contains all the functions to read metadata,
 and read and rewrite image files.
 
-tools.util contains helper functions for image proce
-go.py is a helper script to execute image file assessment and rewrite
-
+common.util contains helper functions for image processing
+main.py is the script to execute image file assessment and rewrite
 
 ## Coordinate System
  * Data is in ESPG:102713, aka ESRI:102713
@@ -32,6 +54,7 @@ go.py is a helper script to execute image file assessment and rewrite
 * 140814 refers to a geospatial grid defined by state
 * All data in EPSG:102713
 * DEM - 2800x2805, print at 150 dpi~= 18.6"
+
 ```commandline
 astewart@badenov:/tank/anaya/ancillary$ gdalinfo dem140814.tif
 Driver: GTiff/GeoTIFF

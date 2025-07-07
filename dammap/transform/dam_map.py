@@ -4,7 +4,7 @@ from osgeo import ogr, osr
 from PIL import Image
 
 from dammap.common.constants import (
-    BASE_PATH, DELIMITER, ANC_DIR, THUMB_DIR, OUT_DIR, SAT_FNAME, RESIZE_WIDTH, ARROYO_COUNT,
+    MAC_PATH, DELIMITER, ANC_DIR, THUMB_DIR, OUT_DIR, SAT_FNAME, RESIZE_WIDTH, ARROYO_COUNT,
     IMAGE_COUNT, SHP_FIELDS)
 from dammap.common.util import (
     get_csv_dict_reader, get_csv_dict_writer, get_logger, ready_filename)
@@ -236,7 +236,7 @@ class PicMapper(object):
     #         # Reduce image
     #         thumbfname = os.path.join(thumb_path, relfname)
     #         reduce_image_size(
-    #             fullfname, thumbfname, RESIZE_WIDTH, Image.ANTIALIAS,
+    #             fullfname, thumbfname, RESIZE_WIDTH,
     #             overwrite=overwrite, log=self._logger)
     #         # Why?
     #         has_geo = damrec[IK.WKT].startswith("Point")
@@ -367,7 +367,10 @@ class PicMapper(object):
             ADK.IMAGE_META: {},
             ADK.IMAGE_OUT_OF_RANGE: {},
             ADK.IMG_COUNT: 0,
-            ADK.IMG_GEO_COUNT: 0
+            ADK.IMG_GEO_COUNT: 0,
+            ADK.UNIQUE_COORDS: {"no_geo": {}},
+            ADK.WITHIN_BUFFER: {"no_geo": {}},
+            ADK.UNIQUE_CAMERAS: {}
         }
         img_count_total = 0
         img_count_geo = 0
@@ -425,20 +428,27 @@ class PicMapper(object):
         self._logger.info(f"Computed: {self.extent}")
 
     # ...............................................
-    def _add_to_unique_coords(self, dimg):
+    def _add_to_coords(self, dimg, is_unique=True):
+        ckey = ADK.UNIQUE_COORDS
+        geotxt = dimg.wkt
+        if not is_unique:
+            ckey = ADK.WITHIN_BUFFER
+            geotxt = f"Point ({dimg.resolved_longitude:.7f}  {dimg.resolved_latitude:.7f})"
+        # Track files with same geo, either identical or within a buffer distance
         if dimg.dd_ok:
-            if dimg.wkt in self.all_data[ADK.UNIQUE_COORDS].keys():
-                if dimg.arroyo_name in self.all_data[ADK.UNIQUE_COORDS][dimg.wkt].keys():
-                    self.all_data[ADK.UNIQUE_COORDS][dimg.wkt][dimg.arroyo_name].append(dimg.relfname)
+            if geotxt in self.all_data[ckey].keys():
+                if dimg.arroyo_name in self.all_data[ckey][geotxt].keys():
+                    self.all_data[ckey][geotxt][dimg.arroyo_name].append(dimg.relfname)
                 else:
-                    self.all_data[ADK.UNIQUE_COORDS][dimg.wkt][dimg.arroyo_name] = [dimg.relfname]
+                    self.all_data[ckey][geotxt][dimg.arroyo_name] = [dimg.relfname]
             else:
-                self.all_data[ADK.UNIQUE_COORDS][dimg.wkt] = {dimg.arroyo_name:  [dimg.relfname]}
+                self.all_data[ckey][geotxt] = {dimg.arroyo_name:  [dimg.relfname]}
+        # Track files without geo
         else:
-            if dimg.arroyo_name in self.all_data[ADK.UNIQUE_COORDS]["no_geo"].keys():
-                self.all_data[ADK.UNIQUE_COORDS]["no_geo"][dimg.arroyo_name].append(dimg.relfname)
+            if dimg.arroyo_name in self.all_data[ckey]["no_geo"].keys():
+                self.all_data[ckey]["no_geo"][dimg.arroyo_name].append(dimg.relfname)
             else:
-                self.all_data[ADK.UNIQUE_COORDS]["no_geo"][dimg.arroyo_name] = [dimg.relfname]
+                self.all_data[ckey]["no_geo"][dimg.arroyo_name] = [dimg.relfname]
 
     # ...............................................
     def _add_to_unique_cameras(self, dimg):
@@ -464,6 +474,11 @@ class PicMapper(object):
                                              ...},
                                        wkt2: {...},
                                        ...}
+                `similar_coordinates`: {wkt: {arroyo: [relfname, ...]},
+                                             arroyo2: [],
+                                             ...},
+                                       wkt2: {...},
+                                       ...}
         """
         self.all_data = {
             ADK.BASE_PATH: self.base_path,
@@ -474,6 +489,7 @@ class PicMapper(object):
             ADK.IMG_COUNT: 0,
             ADK.IMG_GEO_COUNT: 0,
             ADK.UNIQUE_COORDS: {"no_geo": {}},
+            ADK.WITHIN_BUFFER: {"no_geo": {}},
             ADK.UNIQUE_CAMERAS: {}
         }
         for root, _, files in os.walk(self.image_path):
@@ -488,7 +504,8 @@ class PicMapper(object):
                     # Add image metadata object to image_meta list
                     self.all_data[ADK.IMAGE_META][dimg.relfname] = dimg
                     # Add relfname to unique_coordinate  by arroyo
-                    self._add_to_unique_coords(dimg)
+                    self._add_to_coords(dimg, is_unique=True)
+                    self._add_to_coords(dimg, is_unique=False)
                     # Increment count for each camera in dictionary
                     self._add_to_unique_cameras(dimg)
                     # Evaluate point within expected boundary
@@ -652,11 +669,11 @@ class PicMapper(object):
 
     # ...............................................
     def _resize_image(
-            self, image, thumb_width, thumb_fname, overwrite=True):
+            self, image, orig_width, thumb_width, thumb_fname, overwrite=True):
         success = True
         thumb_base = os.path.basename(thumb_fname)
-        # If no width provided, copy that as thumbnail
-        if thumb_width is None:
+        # If original image is smaller than desired thumbnail width, copy original as thumbnail
+        if thumb_width > orig_width:
             if ready_filename(thumb_fname, overwrite=overwrite):
                 try:
                     image.save(thumb_fname)
@@ -673,7 +690,7 @@ class PicMapper(object):
                 thumb_height = int(float(image.size[1]) * float(wpercent))
                 size = (thumb_width, thumb_height)
                 try:
-                    img = image.resize(size, Image.ANTIALIAS)
+                    img = image.resize(size)
                     img.save(thumb_fname)
                 except Exception as e:
                     success = False
@@ -685,8 +702,7 @@ class PicMapper(object):
         return success
 
     # ...............................................
-    def resize_images(
-            self, outpath, small_width=0, medium_width=0, large_width=0, overwrite=True):
+    def resize_images(self, outpath, thumb_width, overwrite=True):
         """Resize all original images in the image_path tree.
 
         Args:
@@ -710,17 +726,12 @@ class PicMapper(object):
                 # Rewrite the image for one size in largest width smaller than original
                 thumb_fname = os.path.join(
                     outpath, f"{THUMB_DIR}", dimg.relfname)
-                thumb_width = None
-                for w in (large_width, medium_width, small_width):
-                    if thumb_width is None and orig_w > w:
-                        thumb_width = w
-                # thumb_width may be None
 
                 exists = self._resize_image(
-                    img, thumb_width, thumb_fname, overwrite=overwrite)
+                    img, orig_w, thumb_width, thumb_fname, overwrite=overwrite)
 
                 if exists:
-                    dimg.thumb = thumb_fname[len(BASE_PATH):]
+                    dimg.thumb = thumb_fname[len(MAC_PATH):]
                     count += 1
         return count
 

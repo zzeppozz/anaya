@@ -1,6 +1,6 @@
 from osgeo import ogr, osr
 
-MAC_PATH = "/Users/aimeestewart/Library/Mobile Documents/com~apple~CloudDocs/Documents/Home/Anaya/anaya_map"
+MAC_PATH = "/Users/astewart/Documents/anaya_latest"
 BASE_PATH = "/tank/anaya/"
 
 # Path/filenames
@@ -14,6 +14,15 @@ RESIZE_WIDTH = 500
 SAT_IMAGE_FNAME = "op140814.tif"
 DUPES_FNAME = "duplicate_coords"
 DUPES_SHPFNAME = "analyze/anaya_overlaps.shp"
+
+DAM_BUFFER = .005
+THUMB_WIDTH = 2000
+
+
+MAX_Y = 35.45045
+MIN_Y = 35.43479
+MAX_X = -106.05353
+MIN_X = -106.07259
 
 # Sanity check
 ARROYO_COUNT = 69
@@ -38,6 +47,7 @@ class ALL_DATA_KEYS ():
     IMG_COUNT = "img_count"
     IMG_GEO_COUNT = "img_count_geo"
     UNIQUE_COORDS = "unique_coordinates"
+    WITHIN_BUFFER = "coordinates_within_buffer"
     UNIQUE_CAMERAS = "cameras"
 
 # Metadata for image files
@@ -105,10 +115,6 @@ SHP_FIELDS = [
 # minY = 35.43479
 # maxX = -106.05353
 # minX = -106.07259
-#
-# dam_buffer = .0002
-# resize_width = 500
-
 
 # .............................................................................
 class IMG_META:

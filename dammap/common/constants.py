@@ -4,7 +4,8 @@ MAC_PATH = "/Users/astewart/Documents/anaya_latest"
 BASE_PATH = "/tank/anaya/"
 
 # Path/filenames
-IN_DIR = "dams"
+IN_DIR = "dams_2023"
+SURVEY_DIR = "2025_survey"
 ANC_DIR = "ancillary"
 OUT_DIR ="outdam"
 THUMB_DIR = "thumb"

@@ -31,8 +31,49 @@ Project to georeference Anaya Springs arroyos
 
 ### 2025-07
 
-* Track files that share a similar location, within a buffer distance of the first 
-  coordinate encountered for that  
+* Track files that share a similar location, within a buffer distance of an existing 
+  known location for that dam (found from an image where Bill corrected the gps 
+  coordinates for that image) 
+
+* Ensure we both have same data
+
+  1. Copy all of dam images from 2023 corrections that Bill requested and Aimee made 
+     on the full dataset.  Corrections include corrected coordinates, moved and renamed 
+     dams, and deleted images.  Copy this entire "clean" dataset to Bill's computer,
+     name it dams_2023 on both Bill and Aimee's computers. (done 2025-08-22)
+  2. For Bill's new 2025 images, manually edit directory/arroyo names to match pattern
+     established in the clean dataset.  (done 2025-08-22)
+  3. Copy these images as 2025_survey to both computers.  (done 2025-08-22)
+  4. Aimee extend the name-standardization program to rename the dam images within these 
+     dams_2025_dirty directory using the image metadata.  (done 2025-08-23)
+  5. Aimee move pre-2023 66_HighHopes tif images from 2025_survey to dams_2023 
+     directory, on both computers (done 2025-08-23)
+
+* Group 2025_survey images by dam_x (add subdir).  All images are 2025 data and every 
+  image represents a separate dam.  These probably have the most accurate GPS 
+  coordinates, so we will consider them "truth".
+* Group dams_2023 (clean) dam images by dam within an arroyo (match on exact gps point)
+* Examine grouped dams_2023 images by dam, determine if they belong with an existing
+  dam in the dams_2025 data, or if they are unique (possibly areas that can no longer
+  be surveyed, or just missed).  Log questionable points for review by Bill
+
+  1. Populate metadata
+  2. Read all the existing data for an arroyo, group images by matching gps coordinates
+  2. Add a dam_x name to each dam in image dictionary
+  3. Rewrite original data, creating a subdirectory for each dam_x dam, with multiple
+     images from different years --> dams_2025
+
+* Read new 2025 images and writes to dams_2025 input 
+
+  1. Read old images into dictionary
+  2. For each new 2025 images
+  
+     * Search for old arroyo in dictionary, find closest established dam 
+     * Write dam_x to dictionary
+     * Write gps coordinates to image file
+     * Write image file to dam_x directory
+     * 
+* 
 
 ## Run
 

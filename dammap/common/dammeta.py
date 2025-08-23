@@ -97,6 +97,7 @@ class DamMeta(object):
         self.picnum = picnum
         self.wkt = None
         self.guilty_party = "unknown"
+        self.has_meta = True
 
         # If any arroyo, dam values are missing, read from fullpath
         if None in (arroyo_num, arroyo_name, dam_name, dam_date, picnum):
@@ -123,7 +124,9 @@ class DamMeta(object):
                     (self.y_deg, self.y_min, self.y_sec, self.y_dir) = ydms
                     self.longitude = xydd[0]
                     self.latitude = xydd[1]
-        self.set_wkt()
+                self.set_wkt()
+            else:
+                self.has_meta = False
 
     # ...............................................
     def set_logger(self, logger):
@@ -166,6 +169,13 @@ class DamMeta(object):
                 basename, ext = os.path.splitext(fname)
                 try:
                     dam_name, fulldate, picnum = basename.split(SEPARATOR)
+                except ValueError:
+                    try:
+                        _, picnum = basename.split(SEPARATOR)
+                        picnum = picnum.replace(" ", "0")
+                    except:
+                        print(f"Basename {basename} does not parse into 2")
+                        dam_name = arroyo_name.lower()
                 except ValueError:
                     print(f"Basename {basename} does not parse into 3")
                 else:
@@ -311,7 +321,7 @@ class DamMeta(object):
     # ...............................................
     def set_wkt(self):
         if self.dd_ok:
-            self. wkt = f"Point ({self.longitude:.7f}  {self.latitude:.7f})"
+            self.wkt = f"Point ({self.longitude:.7f}  {self.latitude:.7f})"
 
     # ...............................................
     @property

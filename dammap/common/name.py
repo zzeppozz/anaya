@@ -42,6 +42,22 @@ class DamNameOp():
 
     # .............................................................................
     @staticmethod
+    def create_filename(base_filename, damrec):
+        # remove path if exists
+        base_filename = os.path.basename(base_filename)
+        basename, ext = os.path.splitext(base_filename)
+        if ext.lower() == ".jpg":
+            ext = ".JPG"
+        sep = SEPARATOR
+        damname = damrec.arroyo_name.lower()
+        yr, mo, dy = damrec.img_date
+        datestr = f"{yr}-{mo:02d}-{dy:02d}"
+        return f"{damname}{sep}{datestr}{sep}{damrec.picnum}{ext}"
+
+
+
+    # .............................................................................
+    @staticmethod
     def format_filename(filename):
         name = ""
         year = ""

@@ -3,8 +3,7 @@ import csv
 import glob
 import logging
 from logging.handlers import RotatingFileHandler
-import os
-from PIL import Image
+import os, shutil
 import sys
 import time
 
@@ -82,6 +81,16 @@ def merge_files_into_tree(frompath, topath):
                     os.rename(from_filename, to_filename)
                     print("Rename {} --> {}".format(from_filename, to_filename))
 
+# ...............................................
+def rename_in_place(from_fullfname, to_basefname):
+    pth = os.path.split(from_fullfname)[0]
+    to_fullfname = os.path.join(pth, to_basefname)
+    # Test before move
+    if os.path.exists(to_fullfname):
+        print(f"File {to_fullfname} already exists")
+    else:
+        os.rename(from_fullfname, to_fullfname)
+        print(f"Rename {from_fullfname} --> {to_basefname}")
 
 # .............................................................................
 def get_bbox(bbox_str):
@@ -105,6 +114,7 @@ def get_bbox(bbox_str):
 
 # ...............................................
 def ready_filename(fullfilename, overwrite=True):
+    """Delete overwrite is true and file exists; makedirs if needed."""
     if os.path.exists(fullfilename):
         if overwrite:
             try:
@@ -126,6 +136,21 @@ def ready_filename(fullfilename, overwrite=True):
             return True
         else:
             raise Exception('Failed to create directories {}'.format(pth))
+
+
+def copy_fileandmeta_to_dir(oldpath, newpath, fname):
+    old_fullfname = os.path.join(oldpath, fname)
+    new_fullfname = os.path.join(newpath, fname)
+    f"Will copy {fname} from {oldpath} to {newpath}"
+    # if ready_filename(new_fullfname, overwrite=True):
+    #     try:
+    #         # shutil.copy2(old_fullfname, newpath)
+    #         f"Copy {fname} from {oldpath} to {newpath}"
+    #     except Exception as e:
+    #         raise Exception(f"Failed to copy {fname} from {oldpath} to {newpath}")
+
+
+
 
 
 # ...............................................

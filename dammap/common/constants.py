@@ -4,7 +4,8 @@ MAC_PATH = "/Users/astewart/Documents/anaya_latest"
 BASE_PATH = "/tank/anaya/"
 
 # Path/filenames
-IN_DIR = "dams_2023"
+EARLY_DATA_DIR = "dams_2023"
+ALL_DATA_DIR = "dams_2025"
 SURVEY_DIR = "2025_survey"
 ANC_DIR = "ancillary"
 OUT_DIR ="outdam"
@@ -37,6 +38,7 @@ SPACE = " "
 PARENS = ["(", ")"]
 DELETES = ["'", ""]
 
+IMAGE_EXTENSIONS = (".jpg", ".tif", ".tiff")
 
 # Metadata for all dam data
 class ALL_DATA_KEYS ():

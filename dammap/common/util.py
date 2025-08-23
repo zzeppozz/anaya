@@ -7,6 +7,7 @@ import os, shutil
 import sys
 import time
 
+from dammap.common.constants import MAC_PATH, IMAGE_EXTENSIONS
 # from dammap.common.constants import SEPARATOR
 
 LOG_FORMAT = ' '.join(["%(asctime)s",
@@ -63,6 +64,15 @@ def stamp(log, msg):
 
 
 # ...............................................
+def do_recognize_image_file(fname):
+    # Read only non-hidden image files
+    if not fname.startswith("."):
+        for ext in IMAGE_EXTENSIONS:
+            if fname.lower().endswith(ext):
+                return True
+    return False
+
+# ...............................................
 def merge_files_into_tree(frompath, topath):
     for root, dirlist, files in os.walk(frompath):
         # for dir in dirlist:
@@ -114,7 +124,21 @@ def get_bbox(bbox_str):
 
 # ...............................................
 def ready_filename(fullfilename, overwrite=True):
-    """Delete overwrite is true and file exists; makedirs if needed."""
+    """Delete overwrite is true and file exists; makedirs if needed.
+
+    Args:
+        fullfilename: full path to filename to check for existence and directory.
+        overwrite: flag indicating whether to overwrite existing file.
+
+    Returns:
+        True if the file does not exist.  False if the file exists and overwrite
+        is False.
+
+    Postcondition:
+        If overwrite is True, and the file exists, the file will be deleted.
+        If the file does not exist, and the directories do not exist, directories will
+        be created.
+    """
     if os.path.exists(fullfilename):
         if overwrite:
             try:
@@ -138,24 +162,35 @@ def ready_filename(fullfilename, overwrite=True):
             raise Exception('Failed to create directories {}'.format(pth))
 
 
-def copy_fileandmeta_to_dir(oldpath, newpath, fname):
+# ...............................................
+def copy_fileandmeta_to_dir(oldpath, newpath, fname, basepath=MAC_PATH):
+    """Copy the file with permissions and metadata to a new directory.
+
+    Args:
+        oldpath: full path to the directory containing the file to copy
+        newpath: full path to the new directory for the file
+        fname: basename of the file to copy
+        basepath: common directory for both old and new paths (to shorten log statement)
+    """
     old_fullfname = os.path.join(oldpath, fname)
     new_fullfname = os.path.join(newpath, fname)
-    f"Will copy {fname} from {oldpath} to {newpath}"
-    # if ready_filename(new_fullfname, overwrite=True):
-    #     try:
-    #         # shutil.copy2(old_fullfname, newpath)
-    #         f"Copy {fname} from {oldpath} to {newpath}"
-    #     except Exception as e:
-    #         raise Exception(f"Failed to copy {fname} from {oldpath} to {newpath}")
+    idx = len(basepath) + 1
+    if ready_filename(new_fullfname, overwrite=True):
+        try:
+            shutil.copy2(old_fullfname, newpath)
+            print(f"Copied {fname} from  {oldpath[idx:]}  to  {newpath[idx:]}")
+        except Exception as e:
+            raise Exception(f"Failed to copy {fname} from {oldpath} to {newpath}")
 
 
-
-
-
-# ...............................................
+# .............................................................................
 def delete_file(file_name, delete_dir=False):
     """Delete file if it exists, delete directory if it becomes empty
+
+    Args:
+        file_name: full path to file for deletion
+        delete_dir: flag indicating whether to delete the parent directory if it
+            is empty after file deletion
 
     Note:
         If file is shapefile, delete all related files

@@ -7,7 +7,8 @@ from dammap.common.constants import (
     MAC_PATH, DELIMITER, ANC_DIR, THUMB_DIR, OUT_DIR, SAT_FNAME, RESIZE_WIDTH, ARROYO_COUNT,
     IMAGE_COUNT, SHP_FIELDS)
 from dammap.common.util import (
-    get_csv_dict_reader, get_csv_dict_writer, get_logger, ready_filename)
+    do_recognize_image_file, get_csv_dict_reader, get_csv_dict_writer, get_logger,
+    ready_filename)
 from dammap.common.dammeta import DamMeta
 
 from dammap.common.constants import ALL_DATA_KEYS as ADK
@@ -495,7 +496,7 @@ class PicMapper(object):
         for root, _, files in os.walk(self.image_path):
             for fname in files:
                 # Read only non-hidden jpg files
-                if not fname.startswith(".") and fname.lower().endswith("jpg"):
+                if do_recognize_image_file(fname):
                     self.all_data[ADK.IMG_COUNT] += 1
                     fullfname = os.path.join(root, fname)
 

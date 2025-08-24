@@ -1,26 +1,18 @@
 """Process Anaya dam photographs and create CSV, shapefile, and KML file for display."""
 import datetime
-import shutil
-
-from dammap.common.constants import (
-    MAC_PATH, EARLY_DATA_DIR, ALL_DATA_DIR, MAX_X, MAX_Y, MIN_X, MIN_Y)
-from dammap.common.util import (get_logger, stamp)
-from dammap.transform.dam_map import PicMapper
 
 kml_flag = False
 shp_flag = False
 import os
-from PIL import Image
 
 from dammap.common.constants import (
-    MAC_PATH, SURVEY_DIR, OUT_DIR)
+    DAM_BUFFER, EARLY_DATA_DIR, MAC_PATH, MAX_X, MAX_Y, MIN_X, MIN_Y, OUT_DIR,
+    SURVEY_DIR)
 from dammap.common.util import (
     get_logger, do_recognize_image_file, rename_in_place, copy_fileandmeta_to_dir)
 from dammap.common.name import DamNameOp
 from dammap.common.dammeta import DamMeta
-
-# from dammap.common.constants import ALL_DATA_KEYS as ADK
-# from dammap.common.constants import IMAGE_KEYS as IK
+from dammap.transform.dam_map import PicMapper
 
 # DELETE_CHARS = ["\"", ",", """, " ", "(", ")", "_"]
 
@@ -116,18 +108,13 @@ def group_dams_into_subdir_structure(surveypath, newroot):
                     ...
     """
     logger.info("Start Restructuring and Grouping Dam Images into Arroyos/Dams")
-    for root, arroyos, _ in os.walk(surveypath):
-        for arr in arroyos:
-            # Start numbering dams in arroyo, 1 per image
-            damnum = 0
-            logger.info(f"Arroyo {arr}")
-            oldpath = os.path.join(root, arr)
-            files = os.listdir(oldpath)
-            for fname in files:
-                if do_recognize_image_file(fname):
-                    fullfname = os.path.join(oldpath, fname)
-                    # Get metadata from directory and filename
-                    damrec = DamMeta(fullfname, surveypath, logger=logger)
+    inpath = os.path.join(MAC_PATH, EARLY_DATA_DIR)
+    pm = PicMapper(inpath, buffer_distance=DAM_BUFFER, logger=logger)
+    logger.info("Start")
+
+    # Sets all_data dictionary on object
+    read_count = pm.populate_images()
+    logger.info(f"Read {read_count} filenames")
                     if damrec.has_meta:
                         damnum += 1
                         damdir = f"dam_{damnum}"

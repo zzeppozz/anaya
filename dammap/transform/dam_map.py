@@ -430,6 +430,24 @@ class PicMapper(object):
 
     # ...............................................
     def _add_to_coords(self, dimg, is_unique=True):
+        """Create a dictionary of coordinates, and all arroyo/images for those coords.
+
+        Args:
+            dimg: DamMeta object for a dam image
+            is_unique: group images with identical coordinates, or within a buffer of a
+                point.
+
+        Postcondition:
+            populates dictionary in alldata of unique points or buffered points
+                {
+                    wkt: {arroyo: [fname, fname, ...],
+                          arroyo: [fname, fname, ...],
+                          ... },
+                    wkt: {arroyo: [fname, fname, ...],
+                          arroyo: [fname, fname, ...],
+                          ... },
+                }
+        """
         ckey = ADK.UNIQUE_COORDS
         geotxt = dimg.wkt
         if not is_unique:
@@ -499,20 +517,21 @@ class PicMapper(object):
                 if do_recognize_image_file(fname):
                     self.all_data[ADK.IMG_COUNT] += 1
                     fullfname = os.path.join(root, fname)
+                    dimg = self._read_one_image(fullfname)
 
-                    # Get metadata from directory and filename
-                    dimg = DamMeta(fullfname, self.image_path, logger=self._logger)
-                    # Add image metadata object to image_meta list
+                    # # Get metadata from directory and filename
+                    # dimg = DamMeta(fullfname, self.image_path, logger=self._logger)
+                    # # Add image metadata object to image_meta list
+                    # self.all_data[ADK.IMAGE_META][dimg.relfname] = dimg
+                    # # Add relfname to unique_coordinate  by arroyo
+                    # self._add_to_coords(dimg, is_unique=True)
+                    # self._add_to_coords(dimg, is_unique=False)
+                    # # Increment count for each camera in dictionary
+                    # self._add_to_unique_cameras(dimg)
+
                     self.all_data[ADK.IMAGE_META][dimg.relfname] = dimg
-                    # Add relfname to unique_coordinate  by arroyo
-                    self._add_to_coords(dimg, is_unique=True)
-                    self._add_to_coords(dimg, is_unique=False)
-                    # Increment count for each camera in dictionary
-                    self._add_to_unique_cameras(dimg)
-                    # Evaluate point within expected boundary
                     if dimg.dd_ok:
                         self.all_data[ADK.IMG_GEO_COUNT] += 1
-                        dimg.in_bounds = self.eval_extent(dimg.longitude, dimg.latitude)
 
                     # Add image filename to arroyo_meta dict
                     try:
@@ -522,6 +541,24 @@ class PicMapper(object):
 
         self.all_data[ADK.ARROYO_COUNT] = len(self.all_data[ADK.ARROYO_META])
 
+    # ...............................................
+    def _read_one_image(self, fullfname):
+        # Get metadata from directory and filename
+        dimg = DamMeta(fullfname, self.image_path, logger=self._logger)
+        # Add image metadata object to image_meta list
+
+        # Add relfname to unique_coordinate by arroyo
+        # For all pre-2023 images, multiple year/images for an individual dam have
+        # been edited to have identical coordinates
+        self._add_to_coords(dimg, is_unique=True)
+
+        # self._add_to_coords(dimg, is_unique=False)
+        # Increment count for each camera in dictionary
+        self._add_to_unique_cameras(dimg)
+        # Evaluate point within expected boundary
+        if dimg.dd_ok:
+            dimg.in_bounds = self.eval_extent(dimg.longitude, dimg.latitude)
+        return dimg
 
     # ...............................................
     def _summarize_duplicates(self):
@@ -607,11 +644,11 @@ class PicMapper(object):
     def print_summary(self):
         self._logger.info("")
         self._logger.info("Summary:")
-        self._logger.info(f"   Basepath: {self.all_data[ADK.BASE_PATH]})")
-        self._logger.info(f"   Arroyos: {self.all_data[ADK.ARROYO_COUNT]})")
+        self._logger.info(f"   Basepath: {self.all_data[ADK.BASE_PATH]}")
+        self._logger.info(f"   Arroyos: {self.all_data[ADK.ARROYO_COUNT]}")
         self._logger.info(f"   Out of range: {len(self.all_data[ADK.IMAGE_OUT_OF_RANGE])}")
-        self._logger.info(f"   Images: {self.all_data[ADK.IMG_COUNT]})")
-        self._logger.info(f"   In bounds: {self.all_data[ADK.IMG_GEO_COUNT]})")
+        self._logger.info(f"   Images: {self.all_data[ADK.IMG_COUNT]}")
+        self._logger.info(f"   In bounds: {self.all_data[ADK.IMG_GEO_COUNT]}")
         self._logger.info("Cameras:")
         for camera, count in self.all_data[ADK.UNIQUE_CAMERAS].items():
             self._logger.info(f" {camera}: {count}")

@@ -45,6 +45,7 @@ class ALL_DATA_KEYS ():
     BASE_PATH = "base_path"
     ARROYO_COUNT = "arroyo_count"
     ARROYO_META = "arroyo_meta"
+    DAM_META = "dam_meta"
     IMAGE_META = "img_meta"
     IMAGE_OUT_OF_RANGE = "img_out_of_range_meta"
     IMG_COUNT = "img_count"

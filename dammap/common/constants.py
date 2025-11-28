@@ -5,10 +5,12 @@ BASE_PATH = "/tank/anaya/"
 
 # Path/filenames
 EARLY_DATA_DIR = "dams_2023"
-ALL_DATA_DIR = "dams_2025"
+ALL_DATA_DIR = "dams_aggregate"
 SURVEY_DIR = "2025_survey"
+SURVEY_DAMSEP_DIR = "dams_2025_damsep"
 ANC_DIR = "ancillary"
 OUT_DIR ="outdam"
+AGG_DIR = "dams_all"
 THUMB_DIR = "thumb"
 THUMB_DIR_SMALL = "small_thumb"
 SAT_FNAME = "op140814.tif"
@@ -16,6 +18,7 @@ RESIZE_WIDTH = 500
 SAT_IMAGE_FNAME = "op140814.tif"
 DUPES_FNAME = "duplicate_coords"
 DUPES_SHPFNAME = "analyze/anaya_overlaps.shp"
+DAM_PREFIX = "dam"
 
 DAM_BUFFER = .005
 THUMB_WIDTH = 2000
@@ -33,6 +36,7 @@ IMAGE_COUNT = 2886
 DELIMITER = "\t"
 ENCODING = "utf-8"
 SEPARATOR = "_"
+DATE_SEP = "-"
 
 SPACE = " "
 PARENS = ["(", ")"]

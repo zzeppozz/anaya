@@ -8,7 +8,7 @@ import sys
 import time
 
 from dammap.common.constants import MAC_PATH, IMAGE_EXTENSIONS
-# from dammap.common.constants import SEPARATOR
+from dammap.common.constants import DAM_PREFIX, SEPARATOR
 
 LOG_FORMAT = ' '.join(["%(asctime)s",
                        "%(threadName)s.%(module)s.%(funcName)s",
@@ -71,6 +71,33 @@ def do_recognize_image_file(fname):
             if fname.lower().endswith(ext):
                 return True
     return False
+
+# ...............................................
+def identify_path_element(full_name):
+    """Identify whether the path element is an image file, a dam name, or arroyo name.
+
+    Args:
+        full_name: full path to a filename or directory name
+
+    Returns:
+        One of "image", "dam", "arroyo", or None
+    """
+    head, tail = os.path.split(full_name)
+    # Read only non-hidden files/dirs
+    if not tail.startswith("."):
+        if os.path.isfile(full_name):
+            for ext in IMAGE_EXTENSIONS:
+                if full_name.lower().endswith(ext):
+                    return "image"
+        else:
+            parts = tail.split(SEPARATOR)
+            try:
+                int(parts[0])
+                return "arroyo"
+            except:
+                if parts[0] == DAM_PREFIX:
+                    return "dam"
+    return None
 
 # ...............................................
 def merge_files_into_tree(frompath, topath):

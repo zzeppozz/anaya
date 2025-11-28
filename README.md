@@ -29,7 +29,7 @@ Project to georeference Anaya Springs arroyos
 * added new_dams, standardizing names, to the dams directory
 * re-ran the program
 
-### 2025-07
+### 2025-08
 
 * Track files that share a similar location, within a buffer distance of an existing 
   known location for that dam (found from an image where Bill corrected the gps 
@@ -40,18 +40,21 @@ Project to georeference Anaya Springs arroyos
   1. Copy all of dam images from 2023 corrections that Bill requested and Aimee made 
      on the full dataset.  Corrections include corrected coordinates, moved and renamed 
      dams, and deleted images.  Copy this entire "clean" dataset to Bill's computer,
-     name it dams_2023 on both Bill and Aimee's computers. (done 2025-08-22)
+     name it **dams_2023** on both Bill and Aimee's computers. (done 2025-08-22).  
   2. For Bill's new 2025 images, manually edit directory/arroyo names to match pattern
      established in the clean dataset.  (done 2025-08-22)
-  3. Copy these images as 2025_survey to both computers.  (done 2025-08-22)
+  3. Copy these images as **2025_survey** to both computers.  (done 2025-08-22).  
   4. Aimee extend the name-standardization program to rename the dam images within these 
-     dams_2025_dirty directory using the image metadata.  (done 2025-08-23)
-  5. Aimee move pre-2023 66_HighHopes tif images from 2025_survey to dams_2023 
+     **2025_survey** directory using the image metadata.  (done 2025-08-23)
+  5. Aimee move pre-2023 66_HighHopes tif images from **2025_survey** to **dams_2023** 
      directory, on both computers (done 2025-08-23)
+  6. Aimee corrected some names in **dams_2023** for dam number, name consistency 
+     (to match 2025) renamed to dams_2023_b (?)
+  7. 
 
-* Group 2025_survey images by dam_x (add subdir).  All images are 2025 data and every 
+* Group **2025_survey** images by dam_x (add subdir).  All images are 2025 data and every 
   image represents a separate dam.  These probably have the most accurate GPS 
-  coordinates, so we will consider them "truth".
+  coordinates, so we will consider them "truth".  Output is **dams_2025_damsep**
 * Group dams_2023 (clean) dam images by dam within an arroyo (match on exact gps point)
 * Examine grouped dams_2023 images by dam, determine if they belong with an existing
   dam in the dams_2025 data, or if they are unique (possibly areas that can no longer

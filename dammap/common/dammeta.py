@@ -1,8 +1,9 @@
 import exifread
+from logging import INFO, WARN, ERROR
 import os
 from PIL import Image
 
-from dammap.common.constants import (IMAGE_KEYS, IMG_META, SEPARATOR)
+from dammap.common.constants import (DATE_SEP, IMAGE_KEYS, IMG_META, SEPARATOR)
 from dammap.common.util import ready_filename
 
 # .............................................................................
@@ -13,14 +14,14 @@ class DamMeta(object):
     def __init__(
             self, fullpath, basepath,
             thumb=None, arroyo_num=None, arroyo_name=None,
-            dam_name=None, dam_date=None, picnum=None,
+            dam_name=None, dam_date=None, dam_calc=None, picnum=None,
             img_date=None,
             verbatim_longitude=None, verbatim_latitude=None,
             verbatim_longitude_direction=None, verbatim_latitude_direction=None,
             longitude=None, latitude=None,
             x_dir=None, x_deg=None, x_min=None, x_sec=None,
             y_dir=None, y_deg=None, y_min=None, y_sec=None,
-            in_bounds=None, no_geo=None, logger=None):
+            in_bounds=None, no_geo=None, is_dam_separated=False, logger=None):
         """Create a dam object from an image file.
 
         Args:
@@ -30,8 +31,9 @@ class DamMeta(object):
             thumb (str): filename of a thumbnail image relative to a common directory path
             arroyo_num (int): number of the arroyo as determined by the directory name
             arroyo_name (str): name of the arroyo as determined by the directory name
-            dam_name (str): name of the dam as determined by the file name
+            dam_name (str): name of the dam as determined by the file (arroyo) name
             dam_date (str): date of the dam as determined by the file name
+            dam_calc (str): closest 2025 dam name, calculated by distance.
             picnum (str): number of the image file as determined by the file name
             img_date (str): date of the image as determined by the image file metadata
             verbatim_longitude (str): longitude value of the image as reported by the
@@ -64,7 +66,7 @@ class DamMeta(object):
             in_bounds (int): 1 if within the extent of some externally provided bounding box
             logger (object): logger for recording messages to file or command line.
         """
-        self.set_logger(logger)
+        self._logger = logger
         self.fullpath = fullpath
         self._relative_path_idx = len(basepath)
         if not basepath.endswith(os.sep):
@@ -94,6 +96,7 @@ class DamMeta(object):
         self.arroyo_name = arroyo_name
         self.dam_name = dam_name
         self.dam_date = dam_date
+        self.dam_calc = dam_calc
         self.picnum = picnum
         self.wkt = None
         self.guilty_party = "unknown"
@@ -106,14 +109,17 @@ class DamMeta(object):
                 self.arroyo_name,
                 self.dam_name,
                 self.dam_date,
-                self.picnum) = self.parse_relative_fname()
+                self.dam_calc,
+                self.picnum) = self.parse_relative_fname(
+                is_dam_separated=is_dam_separated)
         # If any geo values are missing, read from image file metadata
         if None in (
                 x_deg, x_min, x_sec, x_dir, y_deg, y_min, y_sec, y_dir,
                 longitude, latitude):
-            tags = self.get_image_metadata()
-            if tags:
-                self.img_date, self.guilty_party = self.get_camera_date(tags)
+            tags = DamMeta.get_image_metadata(self.fullpath, self._logger)
+            if tags is not None and len(tags) > 0:
+                self.img_date, self.guilty_party = DamMeta.get_camera_date(
+                    tags, self._logger)
                 xydd, xdms, ydms, verbatim_coordinates = self._get_coordinates(tags)
                 if None not in (xydd, xdms, ydms, verbatim_coordinates):
                     (self.verbatim_longitude,
@@ -128,19 +134,19 @@ class DamMeta(object):
             else:
                 self.has_meta = False
 
-    # ...............................................
-    def set_logger(self, logger):
-        self._logger = logger
+    # # ...............................................
+    # def set_logger(self, logger):
+    #     self._logger = logger
+    #
+    # # ...............................................
+    # def log(self, msg=""):
+    #     if self._logger is not None:
+    #         self._logger.info(msg)
+    #     else:
+    #         print(msg)
 
     # ...............................................
-    def log(self, msg=""):
-        if self._logger is not None:
-            self._logger.info(msg)
-        else:
-            print(msg)
-
-    # ...............................................
-    def parse_relative_fname(self, relfname=None):
+    def parse_relative_fname(self, relfname=None, is_dam_separated=False):
         """Parse a relative filename into metadata about this file.
 
         Args:
@@ -149,50 +155,52 @@ class DamMeta(object):
         Returns:
             arroyo_num (str): integer/number of the arroyo
             arroyo_name (str): name of the arroyo
-            dam_name (str): name of the dam
+            dam_name (str): arroyo name of the dam
             dam_date (list): list of digit-strings, (yyyy, mm, dd)
             picnum (int): integer/number of the photo
         """
         if relfname is None:
             relfname = self.relfname
         arroyo_num = arroyo_name = dam_name = dam_date = picnum = None
-        try:
-            dirname, fname = relfname.split(os.sep)
-        except ValueError:
-            print(f"Relfname {relfname} does not parse into 2")
+        relf_parts = relfname.split(os.sep)
+        if is_dam_separated:
+            arroyodir, damdir, fname = relf_parts
         else:
+            arroyodir, fname = relf_parts
+            damdir = None
+        try:
+            arroyo_num, arroyo_name = arroyodir.split(SEPARATOR)
+        except ValueError:
+            print(f"Dirname {arroyodir} does not parse into 2")
+        else:
+            basename, ext = os.path.splitext(fname)
             try:
-                arroyo_num, arroyo_name = dirname.split(SEPARATOR)
+                dam_name, fulldate, picnum = basename.split(SEPARATOR)
             except ValueError:
-                print(f"Dirname {dirname} does not parse into 2")
-            else:
-                basename, ext = os.path.splitext(fname)
                 try:
-                    dam_name, fulldate, picnum = basename.split(SEPARATOR)
-                except ValueError:
-                    try:
-                        _, picnum = basename.split(SEPARATOR)
-                        picnum = picnum.replace(" ", "0")
-                    except:
-                        print(f"Basename {basename} does not parse into 2")
-                        dam_name = arroyo_name.lower()
-                except ValueError:
-                    print(f"Basename {basename} does not parse into 3")
+                    _, picnum = basename.split(SEPARATOR)
+                    picnum = picnum.replace(" ", "0")
+                except:
+                    print(f"Basename {basename} does not parse into 2")
+                    dam_name = arroyo_name.lower()
+            except ValueError:
+                print(f"Basename {basename} does not parse into 3")
+            else:
+                tmp = fulldate.split("-")
+
+                try:
+                    dam_date = [int(d) for d in tmp]
+                except TypeError:
+                    print(f"Date {fulldate} does not parse into 3")
                 else:
-                    tmp = fulldate.split("-")
+                    if len(dam_date) != 3:
+                        print(f"Date {dam_date} does not parse into 3")
 
-                    try:
-                        dam_date = [int(d) for d in tmp]
-                    except TypeError:
-                        print(f"Date {fulldate} does not parse into 3")
-                    else:
-                        if len(dam_date) != 3:
-                            print(f"Date {dam_date} does not parse into 3")
-
-        return arroyo_num, arroyo_name, dam_name, dam_date, picnum
+        return arroyo_num, arroyo_name, dam_name, dam_date, damdir, picnum
 
     # ...............................................
-    def _get_val_from_alternative_keys(self, tags, alternative_keys):
+    @staticmethod
+    def _get_val_from_alternative_keys(tags, alternative_keys):
         # Get value, first matching alternative key takes precedence
         for key in alternative_keys:
             try:
@@ -213,9 +221,8 @@ class DamMeta(object):
         return valstr
 
     # ...............................................
-    def get_image_metadata(self, fullname=None):
-        if fullname is None:
-            fullname = self.fullpath
+    @staticmethod
+    def get_image_metadata(fullname, logger):
         tags = None
         # Read image metadata
         try:
@@ -224,26 +231,27 @@ class DamMeta(object):
             # Get Exif tags
             tags = exifread.process_file(f)
         except Exception as e:
-            self.log(f"   ** Unable to read image {fullname} metadata, {e}")
+            logger.log(WARN, f"   ** exifread unable to process file {fullname}: {e}")
         finally:
             try:
                 f.close()
             except:
                 pass
-        if not tags:
-            self.log(f"   ** exifread found no tags in {fullname}")
+        if tags is not None and len(tags) == 0:
+            logger.log(WARN, f"   ** exifread found zero tags in {fullname}")
         return tags
 
     # ...............................................
-    def get_camera_date(self, tags):
+    @staticmethod
+    def get_camera_date(tags, logger):
         # Get date
         date_tuple = [0, 0, 0]
-        dtstr = self._get_val_from_alternative_keys(tags, IMG_META.DATE_KEY_OPTS)
+        dtstr = DamMeta._get_val_from_alternative_keys(tags, IMG_META.DATE_KEY_OPTS)
         if dtstr is not None:
             try:
                 date_tuple = [int(x) for x in dtstr.split(":")]
             except:
-                self.log(f"datestr {dtstr} cannot be parsed into integers")
+                logger(WARN, f"datestr {dtstr} cannot be parsed into integers")
         # Get camera and model
         guilty_party = "unknown"
         try:
@@ -279,32 +287,36 @@ class DamMeta(object):
     def _get_coordinates(self, tags):
         dd = xdms = ydms = verbatim_coordinates = None
         gpskeys = [k for k in tags.keys() if k.startswith("GPS")]
-        # Are the GPS tags present?
-        try:
-            verbatim_longitude = f"{tags[IMG_META.X_KEY]}"
-            verbatim_latitude = f"{tags[IMG_META.Y_KEY]}"
-        except KeyError as e:
-            self.log(
-                f"Missing tag in {gpskeys} for {self.guilty_party}, {e}")
+        if not gpskeys:
+            self._logger.log(
+                WARN, f"No GPS keys in {tags.keys()} for {self.guilty_party}")
         else:
+            # Are the GPS tags present?
             try:
-                verbatim_longitude_dir = f"{tags[IMG_META.X_DIR_KEY]}"
-                verbatim_latitude_dir = f"{tags[IMG_META.Y_DIR_KEY]}"
+                verbatim_longitude = f"{tags[IMG_META.X_KEY]}"
+                verbatim_latitude = f"{tags[IMG_META.Y_KEY]}"
             except KeyError as e:
-                self.log(
-                    f"Missing direction tag in {gpskeys} for {self.guilty_party}, {e}")
+                self._logger.log(
+                    WARN, f"Missing tag in {gpskeys} for {self.guilty_party}, {e}")
             else:
-                verbatim_coordinates = (
-                    verbatim_longitude, verbatim_longitude_dir,
-                    verbatim_latitude, verbatim_latitude_dir)
-                xdd, xdeg, xmin, xsec, xdir = self._get_location_vals(
-                    tags, IMG_META.X_KEY, IMG_META.X_DIR_KEY)
-                ydd, ydeg, ymin, ysec, ydir = self._get_location_vals(
-                    tags, IMG_META.Y_KEY, IMG_META.Y_DIR_KEY)
-                # Convert to desired format
-                dd = (xdd, ydd)
-                xdms = (xdeg, xmin, xsec, xdir)
-                ydms = (ydeg, ymin, ysec, ydir)
+                try:
+                    verbatim_longitude_dir = f"{tags[IMG_META.X_DIR_KEY]}"
+                    verbatim_latitude_dir = f"{tags[IMG_META.Y_DIR_KEY]}"
+                except KeyError as e:
+                    self._logger.log(
+                        WARN, f"Missing direction tag in {gpskeys} for {self.guilty_party}, {e}")
+                else:
+                    verbatim_coordinates = (
+                        verbatim_longitude, verbatim_longitude_dir,
+                        verbatim_latitude, verbatim_latitude_dir)
+                    xdd, xdeg, xmin, xsec, xdir = self._get_location_vals(
+                        tags, IMG_META.X_KEY, IMG_META.X_DIR_KEY)
+                    ydd, ydeg, ymin, ysec, ydir = self._get_location_vals(
+                        tags, IMG_META.Y_KEY, IMG_META.Y_DIR_KEY)
+                    # Convert to desired format
+                    dd = (xdd, ydd)
+                    xdms = (xdeg, xmin, xsec, xdir)
+                    ydms = (ydeg, ymin, ysec, ydir)
 
         return dd, xdms, ydms, verbatim_coordinates
 
@@ -386,3 +398,27 @@ class DamMeta(object):
             IMAGE_KEYS.IN_BNDS: self.in_bounds,
             IMAGE_KEYS.NO_GEO: self.dd_ok
         }
+
+"""
+from dammap.common.dammeta import *
+level1 = os.listdir(survey_damsep_path)
+        for arr in level1:
+            arr_path = os.path.join(self.image_path, arr)
+            if identify_path_element(arr_path) == "arroyo":
+                fnames = []
+                level2 = os.listdir(arr_path)
+                if not is_dam_separated:
+                    # Level 2 should be images
+                    self._iterate_images(arr_path, level2, is_dam_separated)
+                else:
+                    # Level 2 should be dams
+                    for dam in level2:
+                        parent_path = os.path.join(self.image_path, arr, dam)
+                        if identify_path_element(parent_path) == "dam":
+                            fnames = os.listdir(parent_path)
+                            self._iterate_images(parent_path, fnames, is_dam_separated)
+
+        self.all_data[ADK.ARROYO_COUNT] = len(self.all_data[ADK.ARROYO_META])
+
+get_image_tags
+"""

@@ -1,9 +1,9 @@
 # .............................................................................
+from logging import INFO, WARN, ERROR
 import os.path
 
-from dammap.common.constants import BASE_PATH, IMAGE_KEYS, IN_DIR, SEPARATOR
-from dammap.common.util import get_csv_dict_reader
-
+from dammap.common.constants import IMAGE_EXTENSIONS, DATE_SEP, SEPARATOR
+from dammap.common.dammeta import DamMeta
 
 class DamNameOp():
 
@@ -20,8 +20,8 @@ class DamNameOp():
         # remove path if exists
         base_filename = os.path.basename(base_filename)
         basename, ext = os.path.splitext(base_filename)
-        if ext.lower() == ".jpg":
-            ext = ".JPG"
+        if ext.lower() in IMAGE_EXTENSIONS:
+            ext = ext.lower()
         for i in range(len(basename)):
             if basename[i].isdigit():
                 idx = i
@@ -48,13 +48,55 @@ class DamNameOp():
         basename, ext = os.path.splitext(base_filename)
         if ext.lower() == ".jpg":
             ext = ".JPG"
-        sep = SEPARATOR
         damname = damrec.arroyo_name.lower()
         yr, mo, dy = damrec.img_date
-        datestr = f"{yr}-{mo:02d}-{dy:02d}"
-        return f"{damname}{sep}{datestr}{sep}{damrec.picnum}{ext}"
+        # change into strings
+        datestr = DATE_SEP.join([yr, f"{mo:02d}", f"{dy:02d}"])
+        newbasename = SEPARATOR.join([damname, datestr, damrec.picnum])
+        return f"{newbasename}{ext}"
 
 
+    # ...............................................
+    @staticmethod
+    def check_filename(dataroot, full_fname, logger):
+        do_rename = False
+        fullpth, fname = os.path.split(full_fname)
+        relpth = fullpth[len(dataroot)+1:]
+        pthparts = relpth.split(os.sep)
+        try:
+            arr, dam = pthparts
+        except ValueError:
+            arr = pthparts[0]
+        arr_name = arr.split(SEPARATOR)[1]
+        basefname = os.path.splitext(fname)[0]
+        fparts = basefname.split(SEPARATOR)
+        try:
+            dam_name, fulldate, picnum = fparts
+        except ValueError:
+            try:
+                first, last = fparts
+            except ValueError:
+                logger.log(WARN, f"What's up with this fname {fname}")
+            else:
+                logger.log(WARN, f"Filename {basefname} does not start with {arr_name}")
+                if first.lower() != "img":
+                    logger.log(WARN, f"Filename {basefname} does not start with img")
+                try:
+                    int(last)
+                    picnum = last
+                    do_rename = True
+                except ValueError:
+                    logger.log(WARN, f"Filename {basefname} does not end with an int")
+        if do_rename:
+            tags = DamMeta.get_image_metadata(full_fname, logger)
+            if tags:
+                (yr, mo, dy), guilty_party = DamMeta.get_camera_date(tags, logger)
+                datestr = DATE_SEP.join([yr, f"{mo:02d}", f"{dy:02d}"])
+                newfname = SEPARATOR.join([arr_name.lower(), datestr, picnum])
+                return os.path.join(fullpth, newfname)
+        else:
+            # Existing fname is correct
+            return full_fname
 
     # .............................................................................
     @staticmethod
@@ -85,7 +127,8 @@ class DamNameOp():
                     datecount += 1
             elif ch.isdigit():
                 num += ch
-        return f"{name}_{year}-{mon}-{day}_{num}"
+        datestr = DATE_SEP.join([year, f"{int(mon):02d}", f"{int(day):02d}"])
+        return SEPARATOR.join([name, datestr, num])
 
     # .............................................................................
     @staticmethod
@@ -171,7 +214,6 @@ class DamNameOp():
 
         return arroyo_num, arroyo_name, dam_name, dam_date, picnum
 
-
     # ...............................................
     @staticmethod
     def construct_relative_fname(arroyo_num, arroyo_name, dam_name, dam_date, picnum):
@@ -193,7 +235,26 @@ class DamNameOp():
         new_rel_filename = os.path.join(new_arroyo_dir, new_arroyo_fname)
         return new_rel_filename
 
-
+    # # ...............................................
+    # @staticmethod
+    # def construct_fname(arroyo_dir, dam_name, dam_date, picnum):
+    #     """Parse a relative filename into metadata about this file.
+    #
+    #     Args:
+    #         arroyo_num (str): integer/number of the arroyo
+    #         arroyo_name (str): name of the arroyo
+    #         dam_name (str): name of the dam
+    #         dam_date (list): list of digit-strings, (yyyy, mm, dd)
+    #         picnum (int): integer/number of the photo
+    #
+    #     Returns:
+    #         relfname (str): relative filename containing parent directory and filename
+    #     """
+    #     year, mon, day = dam_date
+    #     new_arroyo_dir = f"{arroyo_num}_{arroyo_name}"
+    #     new_arroyo_fname = f"{dam_name}_{year}-{mon}-{day}_{picnum}"
+    #     new_rel_filename = os.path.join(new_arroyo_dir, new_arroyo_fname)
+    #     return new_rel_filename
 # .............................................................................
 def fix_names_in_tree(inpath, do_files=False):
     """Fix names in a tree, either directories or files.
@@ -251,31 +312,31 @@ def test_names_in_tree(inpath):
                 print("   Dam:    {}, {}-{}-{}, {}".format(
                     name, date_lst[0], date_lst[1], date_lst[2], picnum))
 
-# .............................................................................
-def move_arroyos(csvfilename, delimiter, field, dest_arroyo_dir, logger):
-    """Move images from one arroyo to another, renaming appropriately.
-
-    Args:
-        csvfilename (str): CSV file with misplaced-images.
-        delimiter (char): character delimiting fields in the CSV file.
-        field (str): Field in CSV containing the full path of misplaced images.
-        dest_arroyo_dir (str): Destination arroyo directory for the images.
-    """
-    new_arroyo_num, new_arroyo_name = dest_arroyo_dir.split("_")
-    new_dam_name = new_arroyo_name.lower()
-    inpath = os.path.join(BASE_PATH, IN_DIR)
-
-    reader, inf = get_csv_dict_reader(csvfilename, delimiter)
-    for row in reader:
-        misnamed_imagefile = row[field]
-        rel_fname = misnamed_imagefile[len(inpath)+1:]
-        arroyo_num, arroyo_name, dam_name, dam_date, picnum = \
-            DamNameOp.parse_relative_fname(rel_fname)
-        if arroyo_name != new_arroyo_name:
-            # Add 90000 to the picnum to ensure no conflicts with files in destination directory
-            new_picnum = str(int(picnum) + 90000)
-            new_rel_filename = DamNameOp.construct_relative_fname(
-                new_arroyo_num, new_arroyo_name, new_dam_name, dam_date, new_picnum)
-            renamed_imagefile = os.path.join(BASE_PATH, IN_DIR, f"{new_rel_filename}.JPG")
-            # os.rename(misnamed_imagefile, renamed_imagefile)
-            logger.info(f"Rename {misnamed_imagefile} --> {renamed_imagefile}")
+# # .............................................................................
+# def move_arroyos(csvfilename, delimiter, field, dest_arroyo_dir, logger):
+#     """Move images from one arroyo to another, renaming appropriately.
+#
+#     Args:
+#         csvfilename (str): CSV file with misplaced-images.
+#         delimiter (char): character delimiting fields in the CSV file.
+#         field (str): Field in CSV containing the full path of misplaced images.
+#         dest_arroyo_dir (str): Destination arroyo directory for the images.
+#     """
+#     new_arroyo_num, new_arroyo_name = dest_arroyo_dir.split("_")
+#     new_dam_name = new_arroyo_name.lower()
+#     inpath = os.path.join(BASE_PATH, IN_DIR)
+#
+#     reader, inf = get_csv_dict_reader(csvfilename, delimiter)
+#     for row in reader:
+#         misnamed_imagefile = row[field]
+#         rel_fname = misnamed_imagefile[len(inpath)+1:]
+#         arroyo_num, arroyo_name, dam_name, dam_date, picnum = \
+#             DamNameOp.parse_relative_fname(rel_fname)
+#         if arroyo_name != new_arroyo_name:
+#             # Add 90000 to the picnum to ensure no conflicts with files in destination directory
+#             new_picnum = str(int(picnum) + 90000)
+#             new_rel_filename = DamNameOp.construct_relative_fname(
+#                 new_arroyo_num, new_arroyo_name, new_dam_name, dam_date, new_picnum)
+#             renamed_imagefile = os.path.join(inpath, f"{new_rel_filename}.JPG")
+#             # os.rename(misnamed_imagefile, renamed_imagefile)
+#             logger.info(f"Rename {misnamed_imagefile} --> {renamed_imagefile}")

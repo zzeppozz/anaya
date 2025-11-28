@@ -1,4 +1,5 @@
 import exifread
+from logging import INFO, WARN
 import os
 from osgeo import ogr, osr
 from PIL import Image
@@ -6,9 +7,10 @@ from PIL import Image
 from dammap.common.constants import (
     MAC_PATH, DELIMITER, ANC_DIR, THUMB_DIR, OUT_DIR, SAT_FNAME, RESIZE_WIDTH, ARROYO_COUNT,
     IMAGE_COUNT, SHP_FIELDS)
+from dammap.common.name import DamNameOp
 from dammap.common.util import (
-    do_recognize_image_file, get_csv_dict_reader, get_csv_dict_writer, get_logger,
-    ready_filename)
+    get_csv_dict_reader, get_csv_dict_writer, get_logger,
+    identify_path_element, ready_filename)
 from dammap.common.dammeta import DamMeta
 
 from dammap.common.constants import ALL_DATA_KEYS as ADK
@@ -477,7 +479,7 @@ class PicMapper(object):
             self.all_data[ADK.UNIQUE_CAMERAS][dimg.guilty_party] = 1
 
     # ...............................................
-    def populate_images(self):
+    def populate_images(self, is_dam_separated=False):
         """Read metadata from the directory names and filenames within image_path.
 
         Results in:
@@ -493,7 +495,7 @@ class PicMapper(object):
                                              ...},
                                        wkt2: {...},
                                        ...}
-                `similar_coordinates`: {wkt: {arroyo: [relfname, ...]},
+                `coordinates_within_buffer`: {wkt: {arroyo: [relfname, ...]},
                                              arroyo2: [],
                                              ...},
                                        wkt2: {...},
@@ -511,23 +513,45 @@ class PicMapper(object):
             ADK.WITHIN_BUFFER: {"no_geo": {}},
             ADK.UNIQUE_CAMERAS: {}
         }
-        for root, _, files in os.walk(self.image_path):
-            for fname in files:
-                # Read only non-hidden jpg files
-                if do_recognize_image_file(fname):
-                    self.all_data[ADK.IMG_COUNT] += 1
-                    fullfname = os.path.join(root, fname)
-                    dimg = self._read_one_image(fullfname)
+        image_count = 0
+        # Should always be arroyos
+        level1 = os.listdir(self.image_path)
+        for arr in level1:
+            arr_path = os.path.join(self.image_path, arr)
+            if identify_path_element(arr_path) == "arroyo":
+                fnames = []
+                level2 = os.listdir(arr_path)
+                if not is_dam_separated:
+                    # Level 2 should be images
+                    self._iterate_images(arr_path, level2, is_dam_separated)
+                else:
+                    # Level 2 should be dams
+                    for dam in level2:
+                        parent_path = os.path.join(self.image_path, arr, dam)
+                        if identify_path_element(parent_path) == "dam":
+                            fnames = os.listdir(parent_path)
+                            self._iterate_images(parent_path, fnames, is_dam_separated)
 
-                    # # Get metadata from directory and filename
-                    # dimg = DamMeta(fullfname, self.image_path, logger=self._logger)
-                    # # Add image metadata object to image_meta list
-                    # self.all_data[ADK.IMAGE_META][dimg.relfname] = dimg
-                    # # Add relfname to unique_coordinate  by arroyo
-                    # self._add_to_coords(dimg, is_unique=True)
-                    # self._add_to_coords(dimg, is_unique=False)
-                    # # Increment count for each camera in dictionary
-                    # self._add_to_unique_cameras(dimg)
+        self.all_data[ADK.ARROYO_COUNT] = len(self.all_data[ADK.ARROYO_META])
+
+    # ...............................................
+    def _iterate_images(self, parent_path, fnames, is_dam_separated):
+        for fname in fnames:
+            fullfname = os.path.join(parent_path, fname)
+            if identify_path_element(fullfname) == "image":
+                ret_fname = DamNameOp.check_filename(
+                    self.image_path, fullfname, self._logger)
+                # If None, skip this image
+                if ret_fname is None:
+                    self._logger.log(INFO, f"Skipping {fullfname} without tags")
+                else:
+                    # If inconsistent image name AND has tags, rename here
+                    if ret_fname != fullfname:
+                        self._logger.log(
+                            WARN, f"Rename {fullfname} to constructed {ret_fname}")
+                    # DamNameOp.construct_relative_fname(arroyo_num, arroyo_name, dam_name, dam_date, picnum)
+                    self.all_data[ADK.IMG_COUNT] += 1
+                    dimg = self._read_one_image(fullfname, is_dam_separated)
 
                     self.all_data[ADK.IMAGE_META][dimg.relfname] = dimg
                     if dimg.dd_ok:
@@ -539,12 +563,11 @@ class PicMapper(object):
                     except:
                         self.all_data[ADK.ARROYO_META][dimg.arroyo_name] = [dimg.relfname]
 
-        self.all_data[ADK.ARROYO_COUNT] = len(self.all_data[ADK.ARROYO_META])
-
     # ...............................................
-    def _read_one_image(self, fullfname):
+    def _read_one_image(self, fullfname, is_dam_separated):
         # Get metadata from directory and filename
-        dimg = DamMeta(fullfname, self.image_path, logger=self._logger)
+        dimg = DamMeta(
+            fullfname, self.image_path, is_dam_separated=is_dam_separated, logger=self._logger)
         # Add image metadata object to image_meta list
 
         # Add relfname to unique_coordinate by arroyo

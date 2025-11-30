@@ -194,8 +194,8 @@ def copy_fileandmeta_to_dir(oldpath, newpath, fname, basepath=MAC_PATH):
     """Copy the file with permissions and metadata to a new directory.
 
     Args:
-        oldpath: full path to the directory containing the file to copy
-        newpath: full path to the new directory for the file
+        oldpath: full path to the parent directory containing the file to copy
+        newpath: full path to the new parent directory for the file
         fname: basename of the file to copy
         basepath: common directory for both old and new paths (to shorten log statement)
     """

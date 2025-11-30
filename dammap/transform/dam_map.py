@@ -365,7 +365,7 @@ class PicMapper(object):
         start_idx = len(self.image_path) + 1
         self.all_data = {
             ADK.BASE_PATH: self.base_path,
-            ADK.ARROYO_META: {},
+            ADK.ARROYO_FILES: {},
             ADK.ARROYO_COUNT: 0,
             ADK.IMAGE_META: {},
             ADK.IMAGE_OUT_OF_RANGE: {},
@@ -405,9 +405,9 @@ class PicMapper(object):
 
                 # Summarize arroyos
                 try:
-                    self.all_data[ADK.ARROYO_META][arroyo_name].append(relfname)
+                    self.all_data[ADK.ARROYO_FILES][arroyo_name].append(relfname)
                 except:
-                    self.all_data[ADK.ARROYO_META][arroyo_name] = [relfname]
+                    self.all_data[ADK.ARROYO_FILES][arroyo_name] = [relfname]
         except Exception as e:
             self._logger.error(
                 "Failed to read image metadata from {}, line {}, {}".format(
@@ -415,7 +415,7 @@ class PicMapper(object):
         finally:
             f.close()
 
-        self.all_data[ADK.ARROYO_COUNT] = len(self.all_data[ADK.ARROYO_META])
+        self.all_data[ADK.ARROYO_COUNT] = len(self.all_data[ADK.ARROYO_FILES])
         self.all_data[ADK.IMG_COUNT] = len(self.all_data[ADK.IMAGE_META])
 
     # ...............................................
@@ -485,9 +485,9 @@ class PicMapper(object):
         Results in:
             all_data dictionary with keys/values:
                 `base_path`: base path containing input and output directories
-                `arroyo_meta`: {arroyo_name: [rel_fname, ...], ...}
-                `image_meta`: {rel_fname: {image_metadata}, ...}
-                `out_of_range`: {rel_fname: {image_metadata}, ...}
+                `arroyo_files`: {arroyo_name: [rel_fname, ...], ...}
+                `image_meta`: {rel_fname: DamMeta, ...}
+                `out_of_range`: {rel_fname: DamMeta, ...}
                 `img_count`: total number of images
                 `img_count_geo`: number of georeferenced and in-bounds images
                 `unique_coordinates`: {wkt: {arroyo: [relfname, ...]},
@@ -503,7 +503,7 @@ class PicMapper(object):
         """
         self.all_data = {
             ADK.BASE_PATH: self.base_path,
-            ADK.ARROYO_META: {},
+            ADK.ARROYO_FILES: {},
             ADK.ARROYO_COUNT: 0,
             ADK.IMAGE_META: {},
             ADK.IMAGE_OUT_OF_RANGE: {},
@@ -532,7 +532,7 @@ class PicMapper(object):
                             fnames = os.listdir(parent_path)
                             self._iterate_images(parent_path, fnames, is_dam_separated)
 
-        self.all_data[ADK.ARROYO_COUNT] = len(self.all_data[ADK.ARROYO_META])
+        self.all_data[ADK.ARROYO_COUNT] = len(self.all_data[ADK.ARROYO_FILES])
 
     # ...............................................
     def _iterate_images(self, parent_path, fnames, is_dam_separated):
@@ -549,19 +549,22 @@ class PicMapper(object):
                     if ret_fname != fullfname:
                         self._logger.log(
                             WARN, f"Rename {fullfname} to constructed {ret_fname}")
-                    # DamNameOp.construct_relative_fname(arroyo_num, arroyo_name, dam_name, dam_date, picnum)
-                    self.all_data[ADK.IMG_COUNT] += 1
+                    # Ignore if no metadata
                     dimg = self._read_one_image(fullfname, is_dam_separated)
+                    if dimg.has_meta is True:
+                        self.all_data[ADK.IMG_COUNT] += 1
 
-                    self.all_data[ADK.IMAGE_META][dimg.relfname] = dimg
-                    if dimg.dd_ok:
-                        self.all_data[ADK.IMG_GEO_COUNT] += 1
+                        self.all_data[ADK.IMAGE_META][dimg.relfname] = dimg
+                        if dimg.dd_ok:
+                            self.all_data[ADK.IMG_GEO_COUNT] += 1
 
-                    # Add image filename to arroyo_meta dict
-                    try:
-                        self.all_data[ADK.ARROYO_META][dimg.arroyo_name].append(dimg.relfname)
-                    except:
-                        self.all_data[ADK.ARROYO_META][dimg.arroyo_name] = [dimg.relfname]
+                        # Add image filename to ARROYO_FILES dict
+                        try:
+                            self.all_data[ADK.ARROYO_FILES][dimg.arroyo_name].append(
+                                dimg.relfname)
+                        except:
+                            self.all_data[ADK.ARROYO_FILES][dimg.arroyo_name] = [
+                                dimg.relfname]
 
     # ...............................................
     def _read_one_image(self, fullfname, is_dam_separated):
@@ -708,11 +711,11 @@ class PicMapper(object):
     def _test_meta_counts(self):
         # Count the image files in the arroyos dictionary
         ai_count = 0
-        for ar, filelist in self.all_data[ADK.ARROYO_META].items():
+        for ar, filelist in self.all_data[ADK.ARROYO_FILES].items():
             for f in filelist:
                 ai_count += 1
         if not ai_count == IMAGE_COUNT:
-            print("Error: Found {} images in arroyo_meta, expected {}".format(
+            print("Error: Found {} images in ARROYO_FILES, expected {}".format(
                 ai_count, IMAGE_COUNT))
 
         # Count the image files in the img_meta and out_of_range dictionaries

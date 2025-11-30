@@ -14,8 +14,8 @@ class DamMeta(object):
     def __init__(
             self, fullpath, basepath,
             thumb=None, arroyo_num=None, arroyo_name=None,
-            dam_name=None, dam_date=None, dam_calc=None, picnum=None,
-            img_date=None,
+            dam_name=None, dam_date=None, dam_calc=None, dam_calc_dist=None,
+            picnum=None, img_date=None,
             verbatim_longitude=None, verbatim_latitude=None,
             verbatim_longitude_direction=None, verbatim_latitude_direction=None,
             longitude=None, latitude=None,
@@ -34,6 +34,7 @@ class DamMeta(object):
             dam_name (str): name of the dam as determined by the file (arroyo) name
             dam_date (str): date of the dam as determined by the file name
             dam_calc (str): closest 2025 dam name, calculated by distance.
+            dam_calc_dist (real): distance from 2025 dam calculated as closest.
             picnum (str): number of the image file as determined by the file name
             img_date (str): date of the image as determined by the image file metadata
             verbatim_longitude (str): longitude value of the image as reported by the
@@ -116,10 +117,9 @@ class DamMeta(object):
         if None in (
                 x_deg, x_min, x_sec, x_dir, y_deg, y_min, y_sec, y_dir,
                 longitude, latitude):
-            tags = DamMeta.get_image_metadata(self.fullpath, self._logger)
+            tags, self.guilty_party = DamMeta.get_image_metadata(self.fullpath, self._logger)
             if tags is not None and len(tags) > 0:
-                self.img_date, self.guilty_party = DamMeta.get_camera_date(
-                    tags, self._logger)
+                self.img_date = DamMeta.get_camera_date(tags, self._logger)
                 xydd, xdms, ydms, verbatim_coordinates = self._get_coordinates(tags)
                 if None not in (xydd, xdms, ydms, verbatim_coordinates):
                     (self.verbatim_longitude,
@@ -128,9 +128,12 @@ class DamMeta(object):
                      self.verbatim_latitude_direction) = verbatim_coordinates
                     (self.x_deg, self.x_min, self.x_sec, self.x_dir) = xdms
                     (self.y_deg, self.y_min, self.y_sec, self.y_dir) = ydms
-                    self.longitude = xydd[0]
-                    self.latitude = xydd[1]
+                    # Limit these to 7 digits past decimal point
+                    self.longitude = float(f"{xydd[0]:.7f}")
+                    self.latitude = float(f"{xydd[1]:.7f}")
                 self.set_wkt()
+                if is_dam_separated and self.img_date[0] == 2025:
+                    self.dam_calc_dist = 0
             else:
                 self.has_meta = False
 
@@ -171,7 +174,7 @@ class DamMeta(object):
         try:
             arroyo_num, arroyo_name = arroyodir.split(SEPARATOR)
         except ValueError:
-            print(f"Dirname {arroyodir} does not parse into 2")
+            print(f"Dirname {arryodir} does not parse into 2")
         else:
             basename, ext = os.path.splitext(fname)
             try:
@@ -224,6 +227,7 @@ class DamMeta(object):
     @staticmethod
     def get_image_metadata(fullname, logger):
         tags = None
+        guilty_party = "unknown"
         # Read image metadata
         try:
             # Open file in binary mode
@@ -237,9 +241,28 @@ class DamMeta(object):
                 f.close()
             except:
                 pass
-        if tags is not None and len(tags) == 0:
-            logger.log(WARN, f"   ** exifread found zero tags in {fullname}")
-        return tags
+        if tags is not None:
+            if len(tags) == 0:
+                logger.log(WARN, f"   ** exifread found 0 tags in {fullname}")
+            else:
+                # Get camera and model
+                try:
+                    guilty_party = f"{tags['Image Make']}: {tags['Image Model']}"
+                except:
+                    pass
+                required_keys = [
+                    IMG_META.X_KEY, IMG_META.Y_KEY, IMG_META.X_DIR_KEY, IMG_META.Y_DIR_KEY]
+                gpskeys = [k for k in tags.keys() if k.startswith("GPS")]
+                if not gpskeys:
+                    logger.log(WARN, f"{guilty_party}: No GPS keys in {tags.keys()})")
+                    tags = None
+                if tags is not None:
+                    for rq in required_keys:
+                        if rq not in gpskeys:
+                            logger.log(WARN, f"{guilty_party}: {rq} not in {gpskeys} ")
+                            tags = None
+                            break
+        return tags, guilty_party
 
     # ...............................................
     @staticmethod
@@ -252,13 +275,7 @@ class DamMeta(object):
                 date_tuple = [int(x) for x in dtstr.split(":")]
             except:
                 logger(WARN, f"datestr {dtstr} cannot be parsed into integers")
-        # Get camera and model
-        guilty_party = "unknown"
-        try:
-            guilty_party = f"{tags['Image Make']}: {tags['Image Model']}"
-        except:
-            pass
-        return date_tuple, guilty_party
+        return date_tuple
 
     # ...............................................
     def _get_location_vals(self, tags, locKey, dirKey):
@@ -418,7 +435,7 @@ level1 = os.listdir(survey_damsep_path)
                             fnames = os.listdir(parent_path)
                             self._iterate_images(parent_path, fnames, is_dam_separated)
 
-        self.all_data[ADK.ARROYO_COUNT] = len(self.all_data[ADK.ARROYO_META])
+        self.all_data[ADK.ARROYO_COUNT] = len(self.all_data[ADK.ARROYO_FILES])
 
 get_image_tags
 """

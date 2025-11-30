@@ -88,9 +88,9 @@ class DamNameOp():
                 except ValueError:
                     logger.log(WARN, f"Filename {basefname} does not end with an int")
         if do_rename:
-            tags = DamMeta.get_image_metadata(full_fname, logger)
+            tags, _ = DamMeta.get_image_metadata(full_fname, logger)
             if tags:
-                (yr, mo, dy), guilty_party = DamMeta.get_camera_date(tags, logger)
+                (yr, mo, dy) = DamMeta.get_camera_date(tags, logger)
                 datestr = DATE_SEP.join([yr, f"{mo:02d}", f"{dy:02d}"])
                 newfname = SEPARATOR.join([arr_name.lower(), datestr, picnum])
                 return os.path.join(fullpth, newfname)
@@ -234,6 +234,22 @@ class DamNameOp():
         new_arroyo_fname = f"{dam_name}_{year}-{mon}-{day}_{picnum}"
         new_rel_filename = os.path.join(new_arroyo_dir, new_arroyo_fname)
         return new_rel_filename
+
+    # ...............................................
+    @staticmethod
+    def construct_relative_path(dam_meta):
+        """Parse a relative filename into metadata about this file.
+
+        Args:
+            dam_meta (DamMeta): object with metadata about an image
+
+        Returns:
+            relpath (str): relative path containing parent directory and subdirs
+        """
+        relative_path = f"{dam_meta.arroyo_num}_{dam_meta.arroyo_name}"
+        if dam_meta.dam_calc is not None:
+            relative_path = os.path.join(relative_path, dam_meta.dam_calc)
+        return relative_path
 
     # # ...............................................
     # @staticmethod

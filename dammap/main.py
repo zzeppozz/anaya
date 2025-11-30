@@ -6,13 +6,36 @@ from dammap.common.constants import (
     ALL_DATA_KEYS as ADK, AGG_DIR, MAC_PATH, EARLY_DATA_DIR, THUMB_DIR, THUMB_WIDTH, DAM_BUFFER,
     MAX_X, MAX_Y, MIN_X, MIN_Y, SURVEY_DIR, SURVEY_DAMSEP_DIR, OUT_DIR)
 from dammap.common.organize import (
-    create_dam_subdir_structure_for_unique_dams, match_dams_to_survey,
+    create_dam_subdir_structure_for_unique_dams, match_dams_to_survey, match_old_coords_to_arroyo,
     standardize_camera_filenames)
 from dammap.common.util import (get_logger, stamp)
 from dammap.transform.dam_map import PicMapper
 
 kml_flag = False
 shp_flag = False
+
+def compare_to_groundtruth(grtruth, early):
+    """
+
+    Args:
+        grtruth: dict containing ground truth arroyo name keys and values list of
+            relative filenames {arroyo_name: [rel_fname, ...], ...}
+        early: dict containing old survey arroyo name keys and values list of
+            relative filenames {arroyo_name: [rel_fname, ...], ...}
+
+    Returns:
+
+    """
+    gt_arroyo_files = grtruth[ADK.ARROYO_FILES]
+    gt_img_meta = grtruth[ADK.IMAGE_META]
+    old_arroyo_files = early[ADK.ARROYO_FILES]
+    old_img_meta = early[ADK.IMAGE_META]
+    # for each survey/ground-truth arroyo name, list of filenames
+    for arr_name, arr_gt_rfnames in gt_arroyo_files.items():
+        arr_old_fnames = old_arroyo_files[arr_name]
+        match_old_coords_to_arroyo(
+            arr_name, arr_gt_rfnames, arr_old_fnames, gt_img_meta, old_img_meta,
+            AGG_DIR)
 
 # ...............................................
 if __name__ == "__main__":
@@ -24,8 +47,8 @@ if __name__ == "__main__":
     # dam_buffer = .0002
     bbox =( MIN_X, MIN_Y, MAX_X, MAX_Y)
 
-    surveypath = os.path.join(MAC_PATH, SURVEY_DIR)
-    survey_damsep_path = os.path.join(MAC_PATH, SURVEY_DAMSEP_DIR)
+    gtpath = os.path.join(MAC_PATH, SURVEY_DIR)
+    gt_damsep_path = os.path.join(MAC_PATH, SURVEY_DAMSEP_DIR)
     earlypath = os.path.join(MAC_PATH, EARLY_DATA_DIR)
     aggregate_path = os.path.join(MAC_PATH, AGG_DIR)
     outpath = os.path.join(MAC_PATH, OUT_DIR)
@@ -48,31 +71,8 @@ if __name__ == "__main__":
     # Separate 2025_survey data into one image per dam
     # create_dam_subdir_structure_for_unique_dams(surveypath, organized_surveypath)
 
-    # Read latest survey (ground truth) data, organized by arroyo and dam
-    pm_survey = PicMapper(survey_damsep_path, buffer_distance=DAM_BUFFER, logger=logger)
-    pm_survey.populate_images(is_dam_separated=True)
-    logger.info(f"Read {pm_survey.all_data['img_count']} 2025 survey images")
-    gt_arroyos = pm_survey.all_data[ADK.ARROYO_META]
-    gt_images = pm_survey.all_data[ADK.IMAGE_META]
+    match_dams_to_survey(earlypath, gt_damsep_path, aggregate_path, logger)
 
-    # Read early data, organized only by arroyo
-    pm_early = PicMapper(earlypath, buffer_distance=DAM_BUFFER, logger=logger)
-    pm_early.populate_images(is_dam_separated=False)
-    logger.info(f"Read {pm_early.all_data['img_count']} 2013-2024 images")
-    old_arroyos = pm_early.all_data[ADK.ARROYO_META]
-    old_images = pm_early.all_data[ADK.IMAGE_META]
-
-    # for each survey/ground-truth arroyo
-    for gt_arroyo in gt_arroyos:
-        dam_coords = {}
-        # make a dict of wkt:dam for arroyo
-        for gt_img in gt_images:
-            dam_coords[gt_img.wkt] = gt_img.dam_calc
-        arroyo_coords = dam_coords.keys()
-        # examine each old image and find closest ground-truth dam
-        for relf_fname in old_arroyos[gt_arroyo]:
-            # TODO: use ogr to find closest point
-            pass
 
     # # Do not restrict to Bounding box
     # pm = PicMapper(earlypath, buffer_distance=DAM_BUFFER, logger=logger)

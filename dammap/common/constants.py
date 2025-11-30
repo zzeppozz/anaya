@@ -1,4 +1,4 @@
-from osgeo import ogr, osr
+from osgeo.ogr import OFTInteger, OFTReal, OFTString
 
 MAC_PATH = "/Users/astewart/Documents/anaya_latest"
 BASE_PATH = "/tank/anaya/"
@@ -22,6 +22,8 @@ DAM_PREFIX = "dam"
 
 DAM_BUFFER = .005
 THUMB_WIDTH = 2000
+# (Decimal degrees, meters latitude); longitude slightly less
+BIG_DISTANCE = (0.0001, 11.1)
 
 
 MAX_Y = 35.45045
@@ -48,7 +50,7 @@ IMAGE_EXTENSIONS = (".jpg", ".tif", ".tiff")
 class ALL_DATA_KEYS ():
     BASE_PATH = "base_path"
     ARROYO_COUNT = "arroyo_count"
-    ARROYO_META = "arroyo_meta"
+    ARROYO_FILES = "arroyo_files"
     DAM_META = "dam_meta"
     IMAGE_META = "img_meta"
     IMAGE_OUT_OF_RANGE = "img_out_of_range_meta"
@@ -90,32 +92,32 @@ class IMAGE_KEYS():
     NO_GEO = "no_geo"
 
 SHP_FIELDS = [
-    (IMAGE_KEYS.FILE_PATH, ogr.OFTString),
-    (IMAGE_KEYS.THUMB, ogr.OFTString),
-    (IMAGE_KEYS.BASE_NAME, ogr.OFTString),
-    (IMAGE_KEYS.ARROYO_NAME, ogr.OFTString),
-    (IMAGE_KEYS.ARROYO_NUM, ogr.OFTInteger),
-    (IMAGE_KEYS.DAM_NAME, ogr.OFTString),
-    (IMAGE_KEYS.PIC_NUM, ogr.OFTString),
-    (IMAGE_KEYS.DAM_DATE, ogr.OFTString),
-    (IMAGE_KEYS.IMG_DATE, ogr.OFTString),
-    (IMAGE_KEYS.LON, ogr.OFTReal),
-    (IMAGE_KEYS.LAT, ogr.OFTReal),
-    (IMAGE_KEYS.WKT, ogr.OFTString),
-    (IMAGE_KEYS.VERB_LON, ogr.OFTString),
-    (IMAGE_KEYS.VERB_LAT, ogr.OFTString),
-    (IMAGE_KEYS.VERB_LON_DIR, ogr.OFTString),
-    (IMAGE_KEYS.VERB_LAT_DIR, ogr.OFTString),
-    (IMAGE_KEYS.X_DIR, ogr.OFTString),
-    (IMAGE_KEYS.X_DEG, ogr.OFTInteger),
-    (IMAGE_KEYS.X_MIN, ogr.OFTInteger),
-    (IMAGE_KEYS.X_SEC, ogr.OFTReal),
-    (IMAGE_KEYS.Y_DIR, ogr.OFTString),
-    (IMAGE_KEYS.Y_DEG, ogr.OFTInteger),
-    (IMAGE_KEYS.Y_MIN, ogr.OFTInteger),
-    (IMAGE_KEYS.Y_SEC, ogr.OFTReal),
-    (IMAGE_KEYS.IN_BNDS, ogr.OFTInteger),
-    (IMAGE_KEYS.NO_GEO, ogr.OFTInteger)
+    (IMAGE_KEYS.FILE_PATH, OFTString),
+    (IMAGE_KEYS.THUMB, OFTString),
+    (IMAGE_KEYS.BASE_NAME, OFTString),
+    (IMAGE_KEYS.ARROYO_NAME, OFTString),
+    (IMAGE_KEYS.ARROYO_NUM, OFTInteger),
+    (IMAGE_KEYS.DAM_NAME, OFTString),
+    (IMAGE_KEYS.PIC_NUM, OFTString),
+    (IMAGE_KEYS.DAM_DATE, OFTString),
+    (IMAGE_KEYS.IMG_DATE, OFTString),
+    (IMAGE_KEYS.LON, OFTReal),
+    (IMAGE_KEYS.LAT, OFTReal),
+    (IMAGE_KEYS.WKT, OFTString),
+    (IMAGE_KEYS.VERB_LON, OFTString),
+    (IMAGE_KEYS.VERB_LAT, OFTString),
+    (IMAGE_KEYS.VERB_LON_DIR, OFTString),
+    (IMAGE_KEYS.VERB_LAT_DIR, OFTString),
+    (IMAGE_KEYS.X_DIR, OFTString),
+    (IMAGE_KEYS.X_DEG, OFTInteger),
+    (IMAGE_KEYS.X_MIN, OFTInteger),
+    (IMAGE_KEYS.X_SEC, OFTReal),
+    (IMAGE_KEYS.Y_DIR, OFTString),
+    (IMAGE_KEYS.Y_DEG, OFTInteger),
+    (IMAGE_KEYS.Y_MIN, OFTInteger),
+    (IMAGE_KEYS.Y_SEC, OFTReal),
+    (IMAGE_KEYS.IN_BNDS, OFTInteger),
+    (IMAGE_KEYS.NO_GEO, OFTInteger)
     ]
 
 

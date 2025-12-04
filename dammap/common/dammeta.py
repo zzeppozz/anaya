@@ -225,7 +225,7 @@ class DamMeta(object):
 
     # ...............................................
     @staticmethod
-    def get_image_metadata(fullname, logger):
+    def get_image_metadata(fullname, logger=None):
         tags = None
         guilty_party = "unknown"
         # Read image metadata
@@ -235,7 +235,8 @@ class DamMeta(object):
             # Get Exif tags
             tags = exifread.process_file(f)
         except Exception as e:
-            logger.log(WARN, f"   ** exifread unable to process file {fullname}: {e}")
+            # print, do not log
+            print(f"   ** exifread unable to process file {fullname}: {e}")
         finally:
             try:
                 f.close()
@@ -243,7 +244,8 @@ class DamMeta(object):
                 pass
         if tags is not None:
             if len(tags) == 0:
-                logger.log(WARN, f"   ** exifread found 0 tags in {fullname}")
+                # print, do not log
+                print(f"   ** exifread found 0 tags in {fullname}")
             else:
                 # Get camera and model
                 try:
@@ -254,12 +256,14 @@ class DamMeta(object):
                     IMG_META.X_KEY, IMG_META.Y_KEY, IMG_META.X_DIR_KEY, IMG_META.Y_DIR_KEY]
                 gpskeys = [k for k in tags.keys() if k.startswith("GPS")]
                 if not gpskeys:
-                    logger.log(WARN, f"{guilty_party}: No GPS keys in {tags.keys()})")
+                    # print, not to logg
+                    print(f"{guilty_party}: No GPS keys in {tags.keys()})")
                     tags = None
                 if tags is not None:
                     for rq in required_keys:
                         if rq not in gpskeys:
-                            logger.log(WARN, f"{guilty_party}: {rq} not in {gpskeys} ")
+                            # print, do not log
+                            print(f"{guilty_party}: {rq} not in {gpskeys} ")
                             tags = None
                             break
         return tags, guilty_party

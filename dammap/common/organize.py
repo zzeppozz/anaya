@@ -8,7 +8,7 @@ from dammap.common.constants import (
     AGG_DIR, ALL_DATA_KEYS as ADK, BIG_DISTANCE, DAM_BUFFER, DAM_PREFIX, EARLY_DATA_DIR,
     MAC_PATH, MAX_X, MAX_Y, MIN_X, MIN_Y, OUT_DIR, SEPARATOR, SURVEY_DAMSEP_DIR, SURVEY_DIR)
 from dammap.common.util import (
-    get_logger, do_recognize_image_file, rename_in_place, copy_fileandmeta_to_dir)
+    do_recognize_image_file, rename_in_place, copy_fileandmeta_to_dir)
 from dammap.common.name import DamNameOp
 from dammap.common.dammeta import DamMeta
 from dammap.transform.dam_map import PicMapper
@@ -123,31 +123,35 @@ def match_dams_to_survey(earlypath, gt_damsep_path, aggregate_path, logger):
     logger.info(f"Read {pm_early.all_data['img_count']} 2013-2024 images")
     old_arroyos = pm_early.all_data[ADK.ARROYO_FILES]
     old_img_meta = pm_early.all_data[ADK.IMAGE_META]
+    idx = len(MAC_PATH) + 1
 
     for arr_name, arr_gt_files in gt_pm.all_data[ADK.ARROYO_FILES].items():
         # if arr_name in ["PricesTrail", "Tiny"]:
-        print(f"-- Arroyo {arr_name}")
+        logger.info(f"-- Arroyo {arr_name}")
         try:
             arr_old_files = old_arroyos[arr_name]
         except:
-            print(f"{arr_name} does not exist in old dataset")
+            logger.info(f"{arr_name} does not exist in old dataset")
         else:
             dam_calcs = match_old_coords_to_arroyo(
                 arr_gt_files, arr_old_files, gt_img_meta, old_img_meta,
-                aggregate_path)
+                aggregate_path, logger)
             for damname, dimg_lst in dam_calcs.items():
-                print(f"  -- Dam {damname}")
+                logger.info(f"  -- Dam {damname}")
                 for dimg in dimg_lst:
                     oldpath = os.path.split(dimg.fullpath)[0]
                     relpath = DamNameOp.construct_relative_path(dimg)
                     newpath = os.path.join(aggregate_path, relpath)
                     if dimg.dam_calc_dist > BIG_DISTANCE[0]:
-                        print(
-                            f"    -- BIG Distance {dimg.dam_calc_dist:.7f}; {dimg.basename}"
-                            f"({BIG_DISTANCE[0]} dd ~= {BIG_DISTANCE[1]} meters)")
+                        logger.info(
+                            f"    -- BIG Distance {dimg.dam_calc_dist:.7f}; "
+                            f"copy {oldpath[idx:]}/{dimg.basename} to {dimg.dam_calc} "
+                            f"in {newpath[idx:]}")
                     else:
-                        print(
-                            f"    -- Distance {dimg.dam_calc_dist:.7f}; {dimg.basename}")
+                        logger.info(
+                            f"    -- Distance {dimg.dam_calc_dist:.7f}; "
+                            f"copy {oldpath[idx:]}/{dimg.basename} to {dimg.dam_calc} "
+                            f"in {newpath[idx:]}")
                     # copy_fileandmeta_to_dir(
                     #     oldpath, newpath, dimg.basename, basepath=MAC_PATH)
 
@@ -155,7 +159,7 @@ def match_dams_to_survey(earlypath, gt_damsep_path, aggregate_path, logger):
 # .............................................................................
 def match_old_coords_to_arroyo(
         arr_gt_files, arr_old_files, gt_img_meta, old_img_meta,
-        outpath):
+        outpath, logger):
     """Match coordinates of early survey images to closest dam in 2025 survey.
 
     Args:
@@ -166,7 +170,7 @@ def match_old_coords_to_arroyo(
         outpath: parent path for new, matched, combined dataset
 
     Returns:
-        dict of dam_name: [DamMeta, ...] for all dams in arr_name
+        dict of {dam_name: [DamMeta, ...], ...} for all dams in arr_name
 
     """
     # make a dict of dam:ground-truth-coords for arroyo
@@ -176,7 +180,7 @@ def match_old_coords_to_arroyo(
     for gt_rfname in arr_gt_files:
         gt_dimg = gt_img_meta[gt_rfname]
         if gt_dimg.dam_calc_dist != 0:
-            print(f"Ground-truth {gt_dimg.dam_calc} distance {gt_dimg.dam_calc_dist}")
+            logger.info(f"Ground-truth {gt_dimg.dam_calc} distance {gt_dimg.dam_calc_dist}")
         gtdam_coords[gt_dimg.dam_calc] = [gt_dimg.longitude, gt_dimg.latitude]
         dam_calcs[gt_dimg.dam_calc] = [gt_dimg]
 
@@ -200,28 +204,3 @@ def match_old_coords_to_arroyo(
         old_dimg.dam_calc_dist = closest_dist
         dam_calcs[closest_dam].append(old_dimg)
     return dam_calcs
-
-# ...............................................
-if __name__ == "__main__":
-    n = datetime.datetime.now()
-    datestr = f"{n.year}-{n.month}-{n.day}"
-    name = f"organize_survey_{datestr}"
-    is_dev = False
-    bbox =( MIN_X, MIN_Y, MAX_X, MAX_Y)
-
-    surveypath = os.path.join(MAC_PATH, SURVEY_DIR)
-    survey_damsep_path = os.path.join(MAC_PATH, SURVEY_DAMSEP_DIR)
-    earlypath = os.path.join(MAC_PATH, EARLY_DATA_DIR)
-    aggregate_path = os.path.join(MAC_PATH, AGG_DIR)
-    outpath = os.path.join(MAC_PATH, OUT_DIR)
-    logger = get_logger(outpath, logname=name)
-
-    # # Rename image files to be standard
-    # standardize_camera_filenames(surveypath)
-
-    # Separate 2025_survey data into one image per dam
-    # create_dam_subdir_structure_for_unique_dams(surveypath, survey_damsep_path)
-
-    # Read early pics, match to closest pic in survey
-    match_dams_to_survey(earlypath, survey_damsep_path, aggregate_path)
-

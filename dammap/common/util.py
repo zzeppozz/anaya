@@ -11,7 +11,7 @@ from dammap.common.constants import MAC_PATH, IMAGE_EXTENSIONS
 from dammap.common.constants import DAM_PREFIX, SEPARATOR
 
 LOG_FORMAT = ' '.join(["%(asctime)s",
-                       "%(threadName)s.%(module)s.%(funcName)s",
+                       "%(module)s.%(funcName)s",
                        "line",
                        "%(lineno)d",
                        "%(levelname)-8s",
@@ -33,7 +33,6 @@ def get_logger(outpath, logname=None):
     timestamp = "{}".format(time.strftime("%Y%m%d-%H%M", time.localtime(secs)))
     if logname is None:
         logname, _ = os.path.splitext(os.path.basename(__file__))
-    # logname = '{}.{}'.format(logname, timestamp)
     logfname = os.path.join(outpath, logname + '.log')
     ready_filename(logfname, overwrite=True)
     # get logger
@@ -47,7 +46,7 @@ def get_logger(outpath, logname=None):
     log.addHandler(file_log_handler)
     # add a console logger
     log.addHandler(logging.StreamHandler(stream=sys.stdout))
-    return log
+    return log, logfname
 
 # .............................................................................
 def logit(log, msg):
@@ -205,7 +204,7 @@ def copy_fileandmeta_to_dir(oldpath, newpath, fname, basepath=MAC_PATH):
     if ready_filename(new_fullfname, overwrite=True):
         try:
             shutil.copy2(old_fullfname, newpath)
-            print(f"Copied {fname} from  {oldpath[idx:]}  to  {newpath[idx:]}")
+            # print(f"Copied {fname} from  {oldpath[idx:]}  to  {newpath[idx:]}")
         except Exception as e:
             raise Exception(f"Failed to copy {fname} from {oldpath} to {newpath}")
 

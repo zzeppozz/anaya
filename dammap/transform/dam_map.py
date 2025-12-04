@@ -48,7 +48,7 @@ class PicMapper(object):
         self._max_x = bbox[2]
         self._max_y = bbox[3]
         if not logger:
-            logger = get_logger(os.path.join(self.base_path, OUT_DIR))
+            logger, logfname = get_logger(os.path.join(self.base_path, OUT_DIR))
         self._logger = logger
 
     # ...............................................
@@ -776,7 +776,7 @@ class PicMapper(object):
         """
         count = 0
         if not self.all_data:
-            self.populate_images()
+            raise Exception("PicMapper is not populated")
         for relfname, dimg in self.all_data[ADK.IMAGE_META].items():
             if dimg.dd_ok:
                 # Get the width, regardless of whether writing
